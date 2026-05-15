@@ -24,13 +24,13 @@
 
 substitutions:
   _REGION: us-central1
-  _REPOSITORY: sanitek                  # Nombre del repositorio en Artifact Registry
+  _REPOSITORY: sanitek-back                  # Nombre del repositorio en Artifact Registry
   _IMAGE: sanitek-backend
   _SERVICE: sanitek-backend             # Nombre del servicio en Cloud Run
   _PROJECT_ID: sanitek-496400
-  _DB_HOST: YOUR_DB_HOST                # IP pública o socket Cloud SQL (/cloudsql/project:region:instance)
+  _DB_HOST: root                # IP pública o socket Cloud SQL (/cloudsql/project:region:instance)
   _DB_PORT: "3306"
-  _DB_NAME: sanitek_db
+  _DB_NAME: sanitek
 
 options:
   logging: CLOUD_LOGGING_ONLY
