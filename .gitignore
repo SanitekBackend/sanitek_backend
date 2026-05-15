@@ -47,3 +47,5 @@ firebase-*.json
 /.quarkus/cli/plugins/
 # TLS Certificates
 .certs/
+
+docs/output_by_year/
