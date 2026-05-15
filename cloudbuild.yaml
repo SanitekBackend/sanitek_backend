@@ -74,6 +74,7 @@ steps:
           --region ${_REGION} \
           --platform managed \
           --port 8080 \
+          --allow-unauthenticated \
           --update-env-vars "DB_HOST=${_DB_HOST},DB_PORT=${_DB_PORT},DB_NAME=${_DB_NAME}" \
           --update-secrets "DB_USER=db-user:latest,DB_PASSWORD=db-password:latest"
         # Si usas Cloud SQL (recomendado), agrega también:
