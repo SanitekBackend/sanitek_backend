@@ -27,7 +27,7 @@ substitutions:
   _REPOSITORY: sanitek                  # Nombre del repositorio en Artifact Registry
   _IMAGE: sanitek-backend
   _SERVICE: sanitek-backend             # Nombre del servicio en Cloud Run
-  _PROJECT_ID: YOUR_PROJECT_ID          # Reemplazar con tu GCP Project ID
+  _PROJECT_ID: sanitek-496400          # Reemplazar con tu GCP Project ID
   _DB_HOST: YOUR_DB_HOST                # IP pública o socket Cloud SQL (/cloudsql/project:region:instance)
   _DB_PORT: "3306"
   _DB_NAME: sanitek_db
