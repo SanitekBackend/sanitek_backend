@@ -30,6 +30,7 @@ substitutions:
   _PROJECT_ID: sanitec-496405
   _DB_JDBC_URL: ""
   _FIREBASE_SERVICE_ACCOUNT_LOCATION: /secrets/firebase.json
+  _CORS_ORIGINS: "https://sanitek-frontend-443589660460.us-central1.run.app"
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -74,7 +75,7 @@ steps:
           --platform managed \
           --port 8080 \
           --allow-unauthenticated \
-          --set-env-vars "DB_JDBC_URL=${_DB_JDBC_URL},DB_SCHEMA_STRATEGY=update,FIREBASE_SERVICE_ACCOUNT_LOCATION=${_FIREBASE_SERVICE_ACCOUNT_LOCATION}" \
+          --set-env-vars "DB_JDBC_URL=${_DB_JDBC_URL},DB_SCHEMA_STRATEGY=update,FIREBASE_SERVICE_ACCOUNT_LOCATION=${_FIREBASE_SERVICE_ACCOUNT_LOCATION},CORS_ORIGINS=${_CORS_ORIGINS}" \
           --set-secrets "DB_USERNAME=db-username:latest,DB_PASSWORD=db-password:latest,/secrets/firebase.json=firebase-service-account:latest"
         # Si usas Cloud SQL (recomendado), agrega también:
         # --add-cloudsql-instances ${_PROJECT_ID}:${_REGION}:YOUR_INSTANCE_NAME
