@@ -27,10 +27,9 @@ substitutions:
   _REPOSITORY: sanitek-back                  # Nombre del repositorio en Artifact Registry
   _IMAGE: sanitek-backend
   _SERVICE: sanitek-backend             # Nombre del servicio en Cloud Run
-  _PROJECT_ID: sanitek-496400
-  _DB_HOST: root                # IP pública o socket Cloud SQL (/cloudsql/project:region:instance)
-  _DB_PORT: "3306"
-  _DB_NAME: sanitek
+  _PROJECT_ID: sanitec-496405
+  _DB_JDBC_URL: ""
+  _FIREBASE_SERVICE_ACCOUNT_LOCATION: /secrets/firebase.json
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -75,8 +74,8 @@ steps:
           --platform managed \
           --port 8080 \
           --allow-unauthenticated \
-          --update-env-vars "DB_HOST=${_DB_HOST},DB_PORT=${_DB_PORT},DB_NAME=${_DB_NAME}" \
-          --update-secrets "DB_USER=db-user:latest,DB_PASSWORD=db-password:latest"
+          --set-env-vars "DB_JDBC_URL=${_DB_JDBC_URL},DB_SCHEMA_STRATEGY=update,FIREBASE_SERVICE_ACCOUNT_LOCATION=${_FIREBASE_SERVICE_ACCOUNT_LOCATION}" \
+          --set-secrets "DB_USERNAME=db-username:latest,DB_PASSWORD=db-password:latest,/secrets/firebase.json=firebase-service-account:latest"
         # Si usas Cloud SQL (recomendado), agrega también:
         # --add-cloudsql-instances ${_PROJECT_ID}:${_REGION}:YOUR_INSTANCE_NAME
 

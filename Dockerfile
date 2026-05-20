@@ -8,6 +8,13 @@ FROM eclipse-temurin:21-jre
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}
 
+# Variables requeridas en runtime — inyectadas por Cloud Run (no hardcodear valores aqui)
+ENV DB_USERNAME="" \
+    DB_PASSWORD="" \
+    DB_JDBC_URL="" \
+    DB_SCHEMA_STRATEGY="" \
+    FIREBASE_SERVICE_ACCOUNT_LOCATION=""
+
 WORKDIR /deployments
 
 COPY target/quarkus-app/lib/      lib/

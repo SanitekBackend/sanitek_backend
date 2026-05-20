@@ -19,8 +19,6 @@ public class AlcaldiaService {
     @Inject IrsaRepository irsaRepo;
     @Inject AlcaldiaMapper alcaldiaMapper;
 
-    // Cada alcaldía genera una query IRSA adicional (N+1 intencional);
-    // optimizable con JOIN FETCH si el volumen de alcaldías crece
     public List<AlcaldiaResponse> obtenerTodas() {
         return alcaldiaRepo.listAll().stream()
                 .map(a -> {
