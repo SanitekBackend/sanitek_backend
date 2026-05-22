@@ -1,22 +1,22 @@
 -- Roles
-INSERT INTO role (id, role_name, created_at, updated_at) VALUES
+INSERT IGNORE INTO role (id, role_name, created_at, updated_at) VALUES
 (1, 'ADMIN', NOW(), NOW()),
 (2, 'USER', NOW(), NOW()),
 (3, 'SUPER_ADMIN', NOW(), NOW());
 
 -- Pollutant units
-INSERT INTO pollutant_unit (id, notation, created_at, updated_at) VALUES
+INSERT IGNORE INTO pollutant_unit (id, notation, created_at, updated_at) VALUES
 (1, 'ug/m3', NOW(), NOW()),
 (2, 'C', NOW(), NOW());
 
 -- Pollutants
-INSERT INTO pollutant (id, nomenclature, name, pollutant_unit, created_at, updated_at) VALUES
+INSERT IGNORE INTO pollutant (id, nomenclature, name, pollutant_unit, created_at, updated_at) VALUES
 (1, 'NO2', 'Nitrogen Dioxide', 1, NOW(), NOW()),
 (2, 'O3', 'Ozone', 1, NOW(), NOW()),
 (3, 'PM2.5', 'Particulate Matter 2.5', 1, NOW(), NOW());
 
 -- Municipalities (CDMX - CONEVAL 2020 social backlog index)
-INSERT INTO municipality (id, municipality_name, social_vulnerability, social_index, created_at, updated_at) VALUES
+INSERT IGNORE INTO municipality (id, municipality_name, social_vulnerability, social_index, created_at, updated_at) VALUES
 (1, 'Alvaro Obregon', -0.37, 'LOW', NOW(), NOW()),
 (2, 'Azcapotzalco', -0.58, 'LOW', NOW(), NOW()),
 (3, 'Benito Juarez', -1.89, 'LOW', NOW(), NOW()),
@@ -35,7 +35,7 @@ INSERT INTO municipality (id, municipality_name, social_vulnerability, social_in
 (16, 'Xochimilco', 0.69, 'MEDIUM', NOW(), NOW());
 
 -- Monitoring stations (SINAICA / desired_stations.csv)
-INSERT INTO station (id, station_short_name, station_name, municipality_id, created_at, updated_at) VALUES
+INSERT IGNORE INTO station (id, station_short_name, station_name, municipality_id, created_at, updated_at) VALUES
 (1, 'AJU', 'Ajusco', 14, NOW(), NOW()),
 (2, 'AJM', 'Ajusco Medio', 14, NOW(), NOW()),
 (3, 'BJU', 'Benito Juarez', 3, NOW(), NOW()),
