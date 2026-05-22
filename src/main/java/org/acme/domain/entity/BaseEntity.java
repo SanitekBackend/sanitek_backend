@@ -8,13 +8,13 @@ public abstract class BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    public Long id;
+    private Long id;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    public Instant createdAt;
+    private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
-    public Instant updatedAt;
+    private Instant updatedAt;
 
     @PrePersist
     void onCreate() {
@@ -25,4 +25,17 @@ public abstract class BaseEntity {
     void onUpdate() {
         updatedAt = Instant.now();
     }
+
+    public Long getId(){
+        return id;
+    }
+
+    public Instant getCreatedAt(){
+        return createdAt;
+    }
+
+    public Instant getUpdatedAt(){
+        return updatedAt;
+    }
+
 }

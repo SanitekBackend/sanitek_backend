@@ -1,32 +1,33 @@
 package org.acme.mapper;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 import org.acme.domain.entity.Irsa;
 import org.acme.dto.response.IrsaResponse;
-import org.acme.dto.response.IrsaResumen;
+import org.acme.dto.response.IrsaSummary;
+import org.acme.dto.response.MunicipalitySummary;
 
 @ApplicationScoped
 public class IrsaMapper {
 
-    @Inject
-    AlcaldiaMapper alcaldiaMapper;
-
-    public IrsaResponse toResponse(Irsa i) {
+    public IrsaResponse toResponse(Irsa irsa) {
+        MunicipalitySummary municipality = irsa.getMunicipality() != null
+                ? new MunicipalitySummary(
+                        irsa.getMunicipality().getId(),
+                        irsa.getMunicipality().getMunicipalityName(),
+                        irsa.getMunicipality().getSocialIndex())
+                : null;
         return new IrsaResponse(
-                i.id,
-                alcaldiaMapper.toResumen(i.alcaldia),
-                i.valorIrsa,
-                i.valorIrsa != null ? i.valorIrsa * 100.0 : 0.0,
-                i.nivelRiesgo,
-                i.fechaCalculo,
-                i.prediccionFutura,
-                i.fechaPrediccion,
-                i.origenCalculo
+                irsa.getId(),
+                municipality,
+                irsa.getIrsaValue(),
+                irsa.getRiskLevel(),
+                irsa.getIsForecast(),
+                irsa.getForecastDate(),
+                irsa.getCreatedAt()
         );
     }
 
-    public IrsaResumen toResumen(Irsa i) {
-        return new IrsaResumen(i.valorIrsa, i.nivelRiesgo, i.fechaCalculo);
+    public IrsaSummary toSummary(Irsa irsa) {
+        return new IrsaSummary(irsa.getIrsaValue(), irsa.getRiskLevel(), irsa.getCreatedAt());
     }
 }

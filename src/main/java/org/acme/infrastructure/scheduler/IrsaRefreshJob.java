@@ -13,21 +13,21 @@ public class IrsaRefreshJob {
 
     @Inject IrsaService irsaService;
 
-    // Cada hora — placeholder para cuando se integren los datasource externos (SINAICA, ERA, etc.)
+    // Hourly placeholder — pending integration with external APIs (SINAICA, ERA, etc.)
     @Scheduled(cron = "{irsa.refresh.cron}")
     void refresh() {
-        LOG.info("[SCHEDULER] Actualización periódica del IRSA — pendiente integración con APIs externas.");
+        LOG.info("[SCHEDULER] Periodic IRSA refresh — pending external API integration.");
     }
 
-    // Cada día a medianoche (hora CDMX) — genera predicciones para los próximos 10 días
+    // Daily at midnight CDMX — generates forecasts for the next 10 days
     @Scheduled(cron = "{irsa.prediccion.cron}")
-    void generarPrediccionesDiarias() {
-        LOG.info("[SCHEDULER] Generando predicciones para los próximos 10 días...");
+    void generateDailyForecasts() {
+        LOG.info("[SCHEDULER] Generating forecasts for the next 10 days...");
         try {
-            irsaService.generarPredicciones(10);
-            LOG.info("[SCHEDULER] Predicciones generadas correctamente.");
+            irsaService.generateForecasts(10);
+            LOG.info("[SCHEDULER] Forecasts generated successfully.");
         } catch (Exception e) {
-            LOG.errorf("[SCHEDULER] Error generando predicciones: %s", e.getMessage());
+            LOG.errorf("[SCHEDULER] Error generating forecasts: %s", e.getMessage());
         }
     }
 }

@@ -3,25 +3,29 @@ package org.acme.service;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import org.acme.domain.entity.Alcaldia;
-import org.acme.domain.entity.DatoMeteorologico;
 import org.acme.domain.entity.Irsa;
-import org.acme.domain.entity.MedicionContaminante;
-import org.acme.domain.enums.NivelRiesgo;
+import org.acme.domain.entity.Municipality;
+import org.acme.domain.entity.NO2;
+import org.acme.domain.entity.O3;
+import org.acme.domain.entity.PM_2_5;
+import org.acme.domain.entity.Temperature;
 import org.acme.domain.irsa.IrsaEngine;
 import org.acme.domain.irsa.IrsaResult;
 import org.acme.domain.irsa.IrsaWeightConfig;
-import org.acme.dto.response.IrsaDiagnosticoResponse;
+import org.acme.dto.response.IrsaDiagnosticResponse;
 import org.acme.dto.response.IrsaResponse;
-import org.acme.dto.response.PuntoTendencia;
-import org.acme.dto.response.TendenciaIrsaResponse;
+import org.acme.dto.response.IrsaTrendResponse;
+import org.acme.dto.response.TrendPoint;
 import org.acme.exception.AppException;
 import org.acme.mapper.IrsaMapper;
-import org.acme.repository.AlcaldiaRepository;
-import org.acme.repository.DatoMeteorologicoRepository;
 import org.acme.repository.IrsaRepository;
-import org.acme.repository.MedicionContaminanteRepository;
-import org.acme.service.SaludService;
+import org.acme.repository.MunicipalityRepository;
+import org.acme.repository.NO2Repository;
+import org.acme.repository.O3Repository;
+import org.acme.repository.PM25Repository;
+import org.acme.repository.StationRepository;
+import org.acme.repository.TemperatureRepository;
+import org.jboss.logging.Logger;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,373 +39,338 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
-import org.jboss.logging.Logger;
 
 @ApplicationScoped
 public class IrsaService {
 
     private static final Logger LOG = Logger.getLogger(IrsaService.class);
 
-    @Inject IrsaRepository irsaRepo;
-    @Inject AlcaldiaRepository alcaldiaRepo;
+    @Inject IrsaRepository irsaRepository;
+    @Inject MunicipalityRepository municipalityRepository;
+    @Inject StationRepository stationRepository;
+    @Inject NO2Repository no2Repository;
+    @Inject O3Repository o3Repository;
+    @Inject PM25Repository pm25Repository;
+    @Inject TemperatureRepository temperatureRepository;
+    @Inject HealthService healthService;
     @Inject IrsaMapper irsaMapper;
-    @Inject MedicionContaminanteRepository medicionRepo;
-    @Inject DatoMeteorologicoRepository meteorologicoRepo;
-    @Inject SaludService saludService;
 
-    public IrsaResponse obtenerUltimoPorAlcaldia(Long idAlcaldia) {
-        return irsaRepo.findLatestByAlcaldia(idAlcaldia)
+    public IrsaResponse getLatestByMunicipality(Long municipalityId) {
+        return irsaRepository.findLatestByMunicipality(municipalityId)
                 .map(irsaMapper::toResponse)
-                .orElseThrow(() -> AppException.notFound("No hay cálculo IRSA para esta alcaldía"));
+                .orElseThrow(() -> AppException.notFound("No IRSA calculation found for this municipality"));
     }
 
-    public List<IrsaResponse> listarUltimos() {
-        return irsaRepo.findAllLatest().stream()
+    public List<IrsaResponse> listLatestAll() {
+        return irsaRepository.findAllLatest().stream()
                 .map(irsaMapper::toResponse)
                 .toList();
     }
 
-    public List<IrsaResponse> obtenerHistorico(Long idAlcaldia, Instant desde, Instant hasta) {
-        return irsaRepo.findHistoricoByAlcaldia(idAlcaldia, desde, hasta).stream()
+    public List<IrsaResponse> getHistorical(Long municipalityId, Instant from, Instant to) {
+        return irsaRepository.findHistoricalByMunicipality(municipalityId, from, to).stream()
                 .map(irsaMapper::toResponse)
                 .toList();
     }
 
-    public List<IrsaResponse> listarPorNivelRiesgo(NivelRiesgo nivel) {
-        return irsaRepo.findByNivelRiesgo(nivel).stream()
+    public List<IrsaResponse> listByRiskLevel(String riskLevel) {
+        return irsaRepository.findByRiskLevel(riskLevel).stream()
                 .map(irsaMapper::toResponse)
                 .toList();
     }
 
     @Transactional
-    public IrsaResponse registrarCalculo(Long idAlcaldia, Float valorIrsa, String origen) {
-        Alcaldia alcaldia = alcaldiaRepo.findByIdOptional(idAlcaldia)
-                .orElseThrow(() -> AppException.notFound("Alcaldía no encontrada"));
+    public IrsaResponse calculate(Long municipalityId) {
+        Municipality municipality = municipalityRepository.findByIdOptional(municipalityId)
+                .orElseThrow(() -> AppException.notFound("Municipality not found"));
+
+        Instant to   = Instant.now();
+        Instant from = to.minus(24, ChronoUnit.HOURS);
+
+        List<Long> stationIds = stationRepository.findIdsByMunicipality(municipalityId);
+
+        double airScore    = calculateAirScore(stationIds, from, to);
+        double climateScore = calculateClimateScore(stationIds);
+        double socioScore  = calculateSocioScore(municipality);
+        double healthScore = healthService.calculateHealthScore(municipalityId);
+
+        IrsaEngine engine = new IrsaEngine(IrsaWeightConfig.defaults());
+        IrsaResult result = engine.calculate(airScore, climateScore, socioScore, healthScore);
+        float irsaValue   = (float) Math.max(0.0, Math.min(1.0, 1.0 - result.score() / 100.0));
+
+        LOG.infof("[IRSA] Municipality=%s | air=%.2f | climate=%.2f | socio=%.2f | health=%.2f | score=%.2f | irsaValue=%.4f | level=%s",
+                municipality.getMunicipalityName(), airScore, climateScore, socioScore, healthScore,
+                result.score(), irsaValue, calculateLevel(irsaValue));
 
         Irsa irsa = new Irsa();
-        irsa.alcaldia = alcaldia;
-        irsa.valorIrsa = valorIrsa;
-        irsa.nivelRiesgo = calcularNivel(valorIrsa);
-        irsa.origenCalculo = (origen != null && !origen.isBlank()) ? origen : "MANUAL";
-        irsaRepo.persist(irsa);
-        irsaRepo.flush();
+        irsa.setMunicipality(municipality);
+        irsa.setIrsaValue(irsaValue);
+        irsa.setRiskLevel(calculateLevel(irsaValue));
+        irsa.setIsForecast(false);
+        irsaRepository.persist(irsa);
 
         return irsaMapper.toResponse(irsa);
     }
 
-    @Transactional
-    public IrsaResponse calcularIrsa(Long idAlcaldia) {
-        Alcaldia alcaldia = alcaldiaRepo.findByIdOptional(idAlcaldia)
-                .orElseThrow(() -> AppException.notFound("Alcaldía no encontrada"));
+    public IrsaDiagnosticResponse getDiagnostic(Long municipalityId) {
+        Municipality municipality = municipalityRepository.findByIdOptional(municipalityId)
+                .orElseThrow(() -> AppException.notFound("Municipality not found"));
 
-        Instant hasta = Instant.now();
-        Instant desde = hasta.minus(24, ChronoUnit.HOURS);
+        Instant to   = Instant.now();
+        Instant from = to.minus(24, ChronoUnit.HOURS);
 
-        double airScore    = calcularPuntajeAire(idAlcaldia, desde, hasta);
-        double climateScore = calcularPuntajeClima(idAlcaldia);
-        double socioScore   = calcularPuntajeSocioeconomico(alcaldia);
-        double healthScore  = saludService.calcularScoreSalud(idAlcaldia);
+        List<Long> stationIds = stationRepository.findIdsByMunicipality(municipalityId);
 
-        IrsaEngine engine = new IrsaEngine(IrsaWeightConfig.defaults());
-        IrsaResult result = engine.calculate(airScore, climateScore, socioScore, healthScore);
-        float valorIrsa = (float) Math.max(0.0, Math.min(1.0, 1.0 - result.score() / 100.0));
+        List<NO2>   no2List   = no2Repository.findByStationsAndDateRange(stationIds, from, to);
+        List<O3>    o3List    = o3Repository.findByStationsAndDateRange(stationIds, from, to);
+        List<PM_2_5> pm25List = pm25Repository.findByStationsAndDateRange(stationIds, from, to);
+        List<Temperature> temps = temperatureRepository.findLatestByStations(stationIds);
 
-        LOG.infof("[IRSA] Alcaldía=%s | aire=%.2f | clima=%.2f | socio=%.2f | salud=%.2f | score=%.2f | valorIrsa=%.4f | nivel=%s",
-                alcaldia.nombre, airScore, climateScore, socioScore, healthScore, result.score(), valorIrsa, calcularNivel(valorIrsa));
+        Map<String, Double> avgByPollutant = new java.util.LinkedHashMap<>();
+        computeAverage(no2List.stream().map(NO2::getMetricValue).toList())
+                .ifPresent(v -> avgByPollutant.put("NO2", v));
+        computeAverage(o3List.stream().map(O3::getMetricValue).toList())
+                .ifPresent(v -> avgByPollutant.put("O3", v));
+        computeAverage(pm25List.stream().map(PM_2_5::getMetricValue).toList())
+                .ifPresent(v -> avgByPollutant.put("PM2.5", v));
 
-        Irsa irsa = new Irsa();
-        irsa.alcaldia = alcaldia;
-        irsa.valorIrsa = valorIrsa;
-        irsa.nivelRiesgo = calcularNivel(valorIrsa);
-        irsa.origenCalculo = "MANUAL";
-        irsaRepo.persist(irsa);
-        irsaRepo.flush();
-
-        return irsaMapper.toResponse(irsa);
-    }
-
-    public IrsaDiagnosticoResponse diagnosticar(Long idAlcaldia) {
-        Alcaldia alcaldia = alcaldiaRepo.findByIdOptional(idAlcaldia)
-                .orElseThrow(() -> AppException.notFound("Alcaldía no encontrada"));
-
-        Instant hasta = Instant.now();
-        Instant desde = hasta.minus(24, ChronoUnit.HOURS);
-
-        List<MedicionContaminante> mediciones = medicionRepo.findByAlcaldiaAndFechaRange(idAlcaldia, desde, hasta);
-        Map<String, Double> promedios = mediciones.stream()
-                .filter(m -> m.valorMedicion != null && m.contaminante != null)
-                .collect(Collectors.groupingBy(
-                        m -> m.contaminante.nomenclatura,
-                        Collectors.averagingDouble(m -> m.valorMedicion)
-                ));
-
-        List<DatoMeteorologico> datosClima = meteorologicoRepo.findByAlcaldia(idAlcaldia);
-
-        double airScore    = calcularPuntajeAire(idAlcaldia, desde, hasta);
-        double climateScore = calcularPuntajeClima(idAlcaldia);
-        double socioScore   = calcularPuntajeSocioeconomico(alcaldia);
-        double healthScore  = saludService.calcularScoreSalud(idAlcaldia);
+        double airScore    = calculateAirScore(stationIds, from, to);
+        double climateScore = calculateClimateScore(stationIds);
+        double socioScore  = calculateSocioScore(municipality);
+        double healthScore = healthService.calculateHealthScore(municipalityId);
 
         IrsaEngine engine = new IrsaEngine(IrsaWeightConfig.defaults());
         IrsaResult result = engine.calculate(airScore, climateScore, socioScore, healthScore);
-        double valorIrsa = Math.max(0.0, Math.min(1.0, 1.0 - result.score() / 100.0));
+        double irsaValue  = Math.max(0.0, Math.min(1.0, 1.0 - result.score() / 100.0));
 
-        LOG.infof("[IRSA] Diagnóstico %s | aire=%.2f×0.35 | clima=%.2f×0.25 | socio=%.2f×0.20 | salud=%.2f×0.20 → score=%.2f → valorIrsa=%.4f | nivel=%s",
-                alcaldia.nombre, airScore, climateScore, socioScore, healthScore,
-                result.score(), valorIrsa, calcularNivel((float) valorIrsa));
-
-        Double temperatura = null;
-        Double humedad = null;
-        if (!datosClima.isEmpty()) {
-            DatoMeteorologico datoActual = datosClima.get(0);
-            temperatura = datoActual.temperaturaAmbiental != null ? datoActual.temperaturaAmbiental.doubleValue() : null;
-            humedad = datoActual.humedadRelativa != null ? datoActual.humedadRelativa.doubleValue() : null;
-        }
-
-        return new IrsaDiagnosticoResponse(
-                idAlcaldia,
-                alcaldia.nombre,
-                airScore,
-                climateScore,
-                socioScore,
-                healthScore,
-                result.score(),
-                valorIrsa,
-                calcularNivel((float) valorIrsa).name(),
-                mediciones.size(),
-                promedios,
-                !datosClima.isEmpty(),
-                alcaldia.nivelRezago != null ? alcaldia.nivelRezago.name() : "N/D",
-                temperatura,
-                humedad
+        return new IrsaDiagnosticResponse(
+                municipalityId,
+                municipality.getMunicipalityName(),
+                airScore, climateScore, socioScore, healthScore,
+                result.score(), irsaValue,
+                calculateLevel((float) irsaValue),
+                no2List.size(), o3List.size(), pm25List.size(),
+                avgByPollutant,
+                !temps.isEmpty(),
+                municipality.getSocialIndex(),
+                municipality.getSocialVulnerability()
         );
     }
 
-    public TendenciaIrsaResponse obtenerTendencia(Long idAlcaldia, String periodo, int cantidad) {
-        Alcaldia alcaldia = alcaldiaRepo.findByIdOptional(idAlcaldia)
-                .orElseThrow(() -> AppException.notFound("Alcaldía no encontrada"));
+    public IrsaTrendResponse getTrend(Long municipalityId, String period, int count) {
+        Municipality municipality = municipalityRepository.findByIdOptional(municipalityId)
+                .orElseThrow(() -> AppException.notFound("Municipality not found"));
 
-        boolean esMensual = "MENSUAL".equalsIgnoreCase(periodo);
-        Instant hasta = Instant.now();
-        Instant desde = esMensual
-                ? hasta.minus(cantidad * 30L, ChronoUnit.DAYS)
-                : hasta.minus(cantidad * 7L,  ChronoUnit.DAYS);
+        boolean monthly = "MONTHLY".equalsIgnoreCase(period);
+        Instant to   = Instant.now();
+        Instant from = monthly
+                ? to.minus(count * 30L, ChronoUnit.DAYS)
+                : to.minus(count * 7L,  ChronoUnit.DAYS);
 
-        List<Irsa> registros = irsaRepo.findHistoricoByAlcaldia(idAlcaldia, desde, hasta);
+        List<Irsa> records = irsaRepository.findHistoricalByMunicipality(municipalityId, from, to);
 
-        if (registros.isEmpty()) {
-            return new TendenciaIrsaResponse(idAlcaldia, alcaldia.nombre,
-                    periodo.toUpperCase(), cantidad, "SIN_DATOS", 0.0, List.of());
+        if (records.isEmpty()) {
+            return new IrsaTrendResponse(municipalityId, municipality.getMunicipalityName(),
+                    period.toUpperCase(), count, "NO_DATA", 0.0, List.of());
         }
 
         ZoneId cdmx = ZoneId.of("America/Mexico_City");
-
-        // Agrupar por clave ordenable ("2025-04" mensual, "2025-W18" semanal)
-        Map<String, List<Irsa>> agrupados = new TreeMap<>(registros.stream()
+        Map<String, List<Irsa>> grouped = new TreeMap<>(records.stream()
                 .collect(Collectors.groupingBy(i -> {
-                    ZonedDateTime zdt = i.fechaCalculo.atZone(cdmx);
-                    if (esMensual) {
+                    ZonedDateTime zdt = i.getCreatedAt().atZone(cdmx);
+                    if (monthly) {
                         return String.format("%04d-%02d", zdt.getYear(), zdt.getMonthValue());
                     } else {
-                        int semana = zdt.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
-                        int anio   = zdt.get(IsoFields.WEEK_BASED_YEAR);
-                        return String.format("%04d-W%02d", anio, semana);
+                        int week = zdt.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR);
+                        int year = zdt.get(IsoFields.WEEK_BASED_YEAR);
+                        return String.format("%04d-W%02d", year, week);
                     }
                 })));
 
-        String[] meses = {"Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"};
+        String[] months = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
 
-        List<PuntoTendencia> puntos = agrupados.entrySet().stream()
+        List<TrendPoint> points = grouped.entrySet().stream()
                 .map(e -> {
-                    List<Double> valores = e.getValue().stream()
-                            .map(i -> (double) i.valorIrsa).toList();
-                    double prom = valores.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-                    double min  = valores.stream().mapToDouble(Double::doubleValue).min().orElse(0);
-                    double max  = valores.stream().mapToDouble(Double::doubleValue).max().orElse(0);
+                    List<Double> values = e.getValue().stream()
+                            .map(i -> (double) i.getIrsaValue()).toList();
+                    double avg = values.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+                    double min = values.stream().mapToDouble(Double::doubleValue).min().orElse(0);
+                    double max = values.stream().mapToDouble(Double::doubleValue).max().orElse(0);
 
-                    // Etiqueta legible a partir de la clave
-                    String clave = e.getKey();
-                    String etiqueta;
-                    if (esMensual) {
-                        int anio = Integer.parseInt(clave.substring(0, 4));
-                        int mes  = Integer.parseInt(clave.substring(5, 7));
-                        etiqueta = meses[mes - 1] + " " + anio;
+                    String key   = e.getKey();
+                    String label;
+                    if (monthly) {
+                        int yr = Integer.parseInt(key.substring(0, 4));
+                        int mo = Integer.parseInt(key.substring(5, 7));
+                        label  = months[mo - 1] + " " + yr;
                     } else {
-                        etiqueta = "Sem " + clave.substring(6) + " (" + clave.substring(0, 4) + ")";
+                        label = "W" + key.substring(6) + " (" + key.substring(0, 4) + ")";
                     }
 
-                    return new PuntoTendencia(etiqueta, prom, min, max,
-                            calcularNivel((float) prom).name(), valores.size());
+                    return new TrendPoint(label, avg, min, max,
+                            calculateLevel((float) avg), values.size());
                 })
                 .toList();
 
-        double variacion = 0.0;
-        String tendencia = "ESTABLE";
-        if (puntos.size() >= 2) {
-            variacion = puntos.getLast().promedioIrsa() - puntos.getFirst().promedioIrsa();
-            if      (variacion >  0.05) tendencia = "EMPEORANDO";
-            else if (variacion < -0.05) tendencia = "MEJORANDO";
+        double variation = 0.0;
+        String trend     = "STABLE";
+        if (points.size() >= 2) {
+            variation = points.getLast().avgIrsa() - points.getFirst().avgIrsa();
+            if      (variation >  0.05) trend = "WORSENING";
+            else if (variation < -0.05) trend = "IMPROVING";
         }
 
-        return new TendenciaIrsaResponse(idAlcaldia, alcaldia.nombre,
-                periodo.toUpperCase(), cantidad, tendencia, variacion, puntos);
+        return new IrsaTrendResponse(municipalityId, municipality.getMunicipalityName(),
+                period.toUpperCase(), count, trend, variation, points);
     }
 
-    // ─── Snapshot diario ─────────────────────────────────────────────────────────
+    public List<IrsaResponse> getDailySnapshot(LocalDate date) {
+        ZoneId cdmx = ZoneId.of("America/Mexico_City");
+        Instant start = date.atStartOfDay(cdmx).toInstant();
+        Instant end   = date.plusDays(1).atStartOfDay(cdmx).toInstant();
 
-    public List<IrsaResponse> obtenerSnapshotDiario(LocalDate fecha) {
-        ZoneId cdmx   = ZoneId.of("America/Mexico_City");
-        Instant inicio = fecha.atStartOfDay(cdmx).toInstant();
-        Instant fin    = fecha.plusDays(1).atStartOfDay(cdmx).toInstant();
-
-        List<Irsa> registros;
-        if (!fecha.isAfter(LocalDate.now(cdmx))) {
-            // Fecha histórica o hoy — busca registros reales
-            registros = irsaRepo.findHistoricoByRango(inicio, fin);
+        List<Irsa> records;
+        if (!date.isAfter(LocalDate.now(cdmx))) {
+            records = irsaRepository.findHistoricalByRange(start, end);
         } else {
-            // Fecha futura — busca predicciones
-            registros = irsaRepo.findPrediccionesByRango(inicio, fin);
+            records = irsaRepository.findForecastsByRange(start, end);
         }
 
-        // Para cada alcaldía toma solo el registro más reciente del día
-        return registros.stream()
+        return records.stream()
                 .collect(Collectors.toMap(
-                        i -> i.alcaldia.id,
+                        i -> i.getMunicipality().getId(),
                         i -> i,
-                        (a, b) -> a.fechaCalculo.isAfter(b.fechaCalculo) ? a : b
+                        (a, b) -> a.getCreatedAt().isAfter(b.getCreatedAt()) ? a : b
                 ))
                 .values().stream()
-                .sorted(Comparator.comparing(i -> i.alcaldia.id))
+                .sorted(Comparator.comparing(i -> i.getMunicipality().getId()))
                 .map(irsaMapper::toResponse)
                 .toList();
     }
 
-    // ─── Generación de predicciones ──────────────────────────────────────────────
-
     @Transactional
-    public void generarPredicciones(int diasAdelante) {
-        ZoneId cdmx    = ZoneId.of("America/Mexico_City");
-        LocalDate hoy  = LocalDate.now(cdmx);
-        Instant desde7 = hoy.minusDays(7).atStartOfDay(cdmx).toInstant();
-        Instant ahora  = Instant.now();
+    public void generateForecasts(int daysAhead) {
+        ZoneId cdmx   = ZoneId.of("America/Mexico_City");
+        LocalDate today = LocalDate.now(cdmx);
+        Instant since7  = today.minusDays(7).atStartOfDay(cdmx).toInstant();
+        Instant now     = Instant.now();
 
-        // Borrar predicciones existentes en el rango para no duplicar
-        Instant inicioRango = hoy.plusDays(1).atStartOfDay(cdmx).toInstant();
-        Instant finRango    = hoy.plusDays(diasAdelante + 1).atStartOfDay(cdmx).toInstant();
-        long eliminadas = irsaRepo.deletePredicciones(inicioRango, finRango);
-        LOG.infof("[PREDICCION] Eliminadas %d predicciones previas", eliminadas);
+        Instant rangeStart = today.plusDays(1).atStartOfDay(cdmx).toInstant();
+        Instant rangeEnd   = today.plusDays(daysAhead + 1).atStartOfDay(cdmx).toInstant();
+        long deleted = irsaRepository.deleteForecasts(rangeStart, rangeEnd);
+        LOG.infof("[FORECAST] Deleted %d existing forecasts", deleted);
 
-        List<Alcaldia> alcaldias = alcaldiaRepo.listAll();
-        int generadas = 0;
+        List<Municipality> municipalities = municipalityRepository.listAll();
+        int generated = 0;
 
-        for (Alcaldia alcaldia : alcaldias) {
-            List<Irsa> historico = irsaRepo.findHistoricoNoPrediccion(alcaldia.id, desde7, ahora);
-            if (historico.isEmpty()) {
-                LOG.warnf("[PREDICCION] Sin histórico para alcaldía %s, omitiendo", alcaldia.nombre);
+        for (Municipality municipality : municipalities) {
+            List<Irsa> history = irsaRepository.findHistoricalNoForecast(municipality.getId(), since7, now);
+            if (history.isEmpty()) {
+                LOG.warnf("[FORECAST] No history for municipality %s, skipping", municipality.getMunicipalityName());
                 continue;
             }
 
-            float promedioIrsa = (float) historico.stream()
-                    .mapToDouble(i -> i.valorIrsa)
+            float avgIrsa = (float) history.stream()
+                    .mapToDouble(i -> i.getIrsaValue())
                     .average()
                     .orElse(0.5);
 
-            for (int d = 1; d <= diasAdelante; d++) {
-                LocalDate fechaTarget = hoy.plusDays(d);
+            for (int d = 1; d <= daysAhead; d++) {
+                LocalDate targetDate = today.plusDays(d);
 
-                Irsa prediccion = new Irsa();
-                prediccion.alcaldia        = alcaldia;
-                prediccion.valorIrsa       = promedioIrsa;
-                prediccion.nivelRiesgo     = calcularNivel(promedioIrsa);
-                prediccion.origenCalculo   = "PREDICCION";
-                prediccion.fechaCalculo    = ahora;
-                prediccion.fechaPrediccion = fechaTarget.atStartOfDay(cdmx).toInstant();
-                irsaRepo.persist(prediccion);
-                generadas++;
+                Irsa forecast = new Irsa();
+                forecast.setMunicipality(municipality);
+                forecast.setIrsaValue(avgIrsa);
+                forecast.setRiskLevel(calculateLevel(avgIrsa));
+                forecast.setIsForecast(true);
+                forecast.setForecastDate(targetDate.atStartOfDay(cdmx).toInstant());
+                irsaRepository.persist(forecast);
+                generated++;
             }
         }
-        LOG.infof("[PREDICCION] Generadas %d predicciones para los próximos %d días", generadas, diasAdelante);
+        LOG.infof("[FORECAST] Generated %d forecasts for the next %d days", generated, daysAhead);
     }
 
-    // Umbrales definidos en la arquitectura v2.0
-    private NivelRiesgo calcularNivel(float valor) {
-        if (valor <= 0.25f) return NivelRiesgo.BAJO;
-        if (valor <= 0.50f) return NivelRiesgo.MODERADO;
-        if (valor <= 0.75f) return NivelRiesgo.ALTO;
-        return NivelRiesgo.CRITICO;
+    // ─── Private helpers ─────────────────────────────────────────────────────────
+
+    private String calculateLevel(float value) {
+        if (value <= 0.25f) return "LOW";
+        if (value <= 0.50f) return "MODERATE";
+        if (value <= 0.75f) return "HIGH";
+        return "CRITICAL";
     }
 
-    private double calcularPuntajeAire(Long idAlcaldia, Instant desde, Instant hasta) {
-        List<MedicionContaminante> mediciones = medicionRepo.findByAlcaldiaAndFechaRange(idAlcaldia, desde, hasta);
-        if (mediciones.isEmpty()) {
-            LOG.warnf("[IRSA] Aire: sin mediciones en las últimas 24h para alcaldía %d, usando neutro 50.0", idAlcaldia);
+    private double calculateAirScore(List<Long> stationIds, Instant from, Instant to) {
+        if (stationIds.isEmpty()) {
+            LOG.warn("[IRSA] Air: no stations, using neutral 50.0");
             return 50.0;
         }
 
-        Map<String, Double> promedios = mediciones.stream()
-                .filter(m -> m.valorMedicion != null && m.contaminante != null)
-                .collect(Collectors.groupingBy(
-                        m -> m.contaminante.nomenclatura,
-                        Collectors.averagingDouble(m -> m.valorMedicion)
-                ));
+        List<NO2>    no2List  = no2Repository.findByStationsAndDateRange(stationIds, from, to);
+        List<O3>     o3List   = o3Repository.findByStationsAndDateRange(stationIds, from, to);
+        List<PM_2_5> pm25List = pm25Repository.findByStationsAndDateRange(stationIds, from, to);
 
-        LOG.infof("[IRSA] Aire: %d mediciones encontradas, promedios por contaminante: %s", mediciones.size(), promedios);
+        if (no2List.isEmpty() && o3List.isEmpty() && pm25List.isEmpty()) {
+            LOG.warn("[IRSA] Air: no measurements in last 24h, using neutral 50.0");
+            return 50.0;
+        }
 
         List<Double> scores = new ArrayList<>();
 
-        // Umbrales NOM-SEMARNAT / IMECA (µg/m³): valor donde puntaje de calidad = 0
-        if (promedios.containsKey("NO2"))
-            scores.add(Math.max(0, 100 - promedios.get("NO2") / 2.1));   // límite 210 µg/m³
-        if (promedios.containsKey("O3"))
-            scores.add(Math.max(0, 100 - promedios.get("O3") / 1.4));    // límite 140 µg/m³
-        if (promedios.containsKey("PM2.5"))
-            scores.add(Math.max(0, 100 - promedios.get("PM2.5") / 0.45)); // límite 45 µg/m³
+        computeAverage(no2List.stream().map(NO2::getMetricValue).toList())
+                .ifPresent(avg -> scores.add(Math.max(0, 100 - avg / 2.1)));
+        computeAverage(o3List.stream().map(O3::getMetricValue).toList())
+                .ifPresent(avg -> scores.add(Math.max(0, 100 - avg / 1.4)));
+        computeAverage(pm25List.stream().map(PM_2_5::getMetricValue).toList())
+                .ifPresent(avg -> scores.add(Math.max(0, 100 - avg / 0.45)));
 
-        double resultado = scores.isEmpty() ? 50.0 : scores.stream().mapToDouble(Double::doubleValue).average().orElse(50.0);
-        LOG.infof("[IRSA] Aire: puntaje final = %.2f", resultado);
-        return resultado;
+        return scores.isEmpty() ? 50.0 : scores.stream().mapToDouble(Double::doubleValue).average().orElse(50.0);
     }
 
-    private double calcularPuntajeClima(Long idAlcaldia) {
-        List<DatoMeteorologico> datos = meteorologicoRepo.findByAlcaldia(idAlcaldia);
-        if (datos.isEmpty()) {
-            LOG.warnf("[IRSA] Clima: sin datos meteorológicos para alcaldía %d, usando neutro 50.0", idAlcaldia);
+    private double calculateClimateScore(List<Long> stationIds) {
+        if (stationIds.isEmpty()) return 50.0;
+
+        List<Temperature> temps = temperatureRepository.findLatestByStations(stationIds);
+        if (temps.isEmpty()) {
+            LOG.warn("[IRSA] Climate: no temperature data, using neutral 50.0");
             return 50.0;
         }
 
-        DatoMeteorologico dato = datos.get(0);
-        LOG.infof("[IRSA] Clima: temperatura=%.1f°C, humedad=%.1f%%", dato.temperaturaAmbiental, dato.humedadRelativa);
+        java.util.OptionalDouble avgTemp = temps.stream()
+                .mapToDouble(t -> parseDouble(t.getMetricValue()))
+                .filter(v -> !Double.isNaN(v))
+                .average();
 
-        List<Double> scores = new ArrayList<>();
+        if (avgTemp.isEmpty()) return 50.0;
 
-        if (dato.temperaturaAmbiental != null) {
-            // Óptimo CDMX: 16-22°C, penalización de 5 puntos por grado de desviación respecto a 19
-            double tempScore = 100 - Math.min(100, Math.abs(dato.temperaturaAmbiental - 19.0) * 5);
-            scores.add(Math.max(0, tempScore));
-        }
-        if (dato.humedadRelativa != null) {
-            // Óptimo: 40-60%, penalización de 2 puntos por punto porcentual de desviación respecto a 50
-            double humScore = 100 - Math.min(100, Math.abs(dato.humedadRelativa - 50.0) * 2);
-            scores.add(Math.max(0, humScore));
-        }
-
-        double resultado = scores.isEmpty() ? 50.0 : scores.stream().mapToDouble(Double::doubleValue).average().orElse(50.0);
-        LOG.infof("[IRSA] Clima: puntaje final = %.2f", resultado);
-        return resultado;
+        // Optimal CDMX: 16-22°C, penalty 5 pts/°C from 19
+        double score = 100 - Math.min(100, Math.abs(avgTemp.getAsDouble() - 19.0) * 5);
+        return Math.max(0, score);
     }
 
-    private double calcularPuntajeSocioeconomico(Alcaldia alcaldia) {
-        if (alcaldia.nivelRezago == null) {
-            LOG.warnf("[IRSA] Socio: alcaldía '%s' sin nivelRezago, usando neutro 50.0", alcaldia.nombre);
+    private double calculateSocioScore(Municipality municipality) {
+        if (municipality.getSocialVulnerability() == null) {
+            LOG.warnf("[IRSA] Socio: no social vulnerability for '%s', using neutral 50.0",
+                    municipality.getMunicipalityName());
             return 50.0;
         }
-        double score = switch (alcaldia.nivelRezago) {
-            case BAJO -> 80.0;
-            case MEDIO -> 55.0;
-            case ALTO -> 30.0;
-            case MUY_ALTO -> 10.0;
-        };
-        LOG.infof("[IRSA] Socio: alcaldía '%s', nivelRezago=%s, puntaje=%.1f", alcaldia.nombre, alcaldia.nivelRezago, score);
-        return score;
+        // CONEVAL index: [-2, 2] where lower = better → map to [100, 0]
+        float v = municipality.getSocialVulnerability();
+        double score = 100.0 - ((v + 2.0) / 4.0) * 100.0;
+        return Math.max(0, Math.min(100, score));
+    }
+
+    private java.util.Optional<Double> computeAverage(List<String> values) {
+        java.util.OptionalDouble avg = values.stream()
+                .mapToDouble(this::parseDouble)
+                .filter(v -> !Double.isNaN(v))
+                .average();
+        return avg.isPresent() ? java.util.Optional.of(avg.getAsDouble()) : java.util.Optional.empty();
+    }
+
+    private double parseDouble(String value) {
+        if (value == null || value.isBlank()) return Double.NaN;
+        try { return Double.parseDouble(value.trim()); }
+        catch (NumberFormatException e) { return Double.NaN; }
     }
 }

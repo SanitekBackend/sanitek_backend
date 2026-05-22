@@ -4,13 +4,12 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import org.acme.domain.enums.NivelRiesgo;
-import org.acme.dto.request.FiltroIrsaRequest;
-import org.acme.dto.response.IrsaDiagnosticoResponse;
+import org.acme.dto.response.IrsaDiagnosticResponse;
 import org.acme.dto.response.IrsaResponse;
-import org.acme.dto.response.TendenciaIrsaResponse;
+import org.acme.dto.response.IrsaTrendResponse;
 import org.acme.service.IrsaService;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.List;
@@ -24,67 +23,113 @@ public class IrsaResource {
     IrsaService service;
 
     @GET
-    public List<IrsaResponse> listarUltimos() {
-        return service.listarUltimos();
+    public List<IrsaResponse> listLatest() {
+        return service.listLatestAll();
     }
 
     @GET
-    @Path("/alcaldia/{id}")
-    public IrsaResponse obtenerPorAlcaldia(@PathParam("id") Long id) {
-        return service.obtenerUltimoPorAlcaldia(id);
+    @Path("/municipality/{id}")
+    public IrsaResponse getByMunicipality(@PathParam("id") Long id) {
+        return service.getLatestByMunicipality(id);
     }
 
     @GET
-    @Path("/historico")
-    public List<IrsaResponse> obtenerHistorico(@BeanParam FiltroIrsaRequest filtro) {
-        return service.obtenerHistorico(filtro.idAlcaldia, filtro.desde, filtro.hasta);
+    @Path("/history")
+    public List<IrsaResponse> getHistorical(
+            @QueryParam("municipalityId") Long municipalityId,
+            @QueryParam("from") String fromStr,
+            @QueryParam("to") String toStr
+    ) {
+
+        Instant from = fromStr != null
+                ? Instant.parse(fromStr)
+                : Instant.now().minusSeconds(60L * 60L * 24L * 30L);
+
+        Instant to = toStr != null
+                ? Instant.parse(toStr)
+                : Instant.now();
+
+        return service.getHistorical(municipalityId, from, to);
     }
 
     @GET
-    @Path("/nivel/{nivel}")
-    public List<IrsaResponse> listarPorNivel(@PathParam("nivel") NivelRiesgo nivel) {
-        return service.listarPorNivelRiesgo(nivel);
+    @Path("/risk-level/{level}")
+    public List<IrsaResponse> listByRiskLevel(@PathParam("level") String level) {
+        return service.listByRiskLevel(level);
     }
 
     @POST
-    @Path("/calcular/{idAlcaldia}")
-    public Response calcular(@PathParam("idAlcaldia") Long idAlcaldia) {
-        IrsaResponse resultado = service.calcularIrsa(idAlcaldia);
-        return Response.status(Response.Status.CREATED).entity(resultado).build();
+    @Path("/calculate/{municipalityId}")
+    public Response calculate(@PathParam("municipalityId") Long municipalityId) {
+
+        IrsaResponse result = service.calculate(municipalityId);
+
+        return Response.status(Response.Status.CREATED)
+                .entity(result)
+                .build();
     }
 
     @GET
-    @Path("/diagnostico/{idAlcaldia}")
-    public IrsaDiagnosticoResponse diagnosticar(@PathParam("idAlcaldia") Long idAlcaldia) {
-        return service.diagnosticar(idAlcaldia);
+    @Path("/diagnostic/{municipalityId}")
+    public IrsaDiagnosticResponse getDiagnostic(
+            @PathParam("municipalityId") Long municipalityId
+    ) {
+        return service.getDiagnostic(municipalityId);
     }
 
     @GET
-    @Path("/tendencia/{idAlcaldia}")
-    public TendenciaIrsaResponse tendencia(
-            @PathParam("idAlcaldia") Long idAlcaldia,
-            @QueryParam("periodo") @DefaultValue("SEMANAL") String periodo,
-            @QueryParam("cantidad") @DefaultValue("8") int cantidad) {
-        return service.obtenerTendencia(idAlcaldia, periodo, cantidad);
+    @Path("/trend/{municipalityId}")
+    public IrsaTrendResponse getTrend(
+            @PathParam("municipalityId") Long municipalityId,
+
+            @QueryParam("period")
+            @DefaultValue("WEEKLY")
+            String period,
+
+            @QueryParam("count")
+            @DefaultValue("8")
+            int count
+    ) {
+
+        return service.getTrend(municipalityId, period, count);
     }
 
     @GET
-    @Path("/diario")
-    public Response snapshotDiario(@QueryParam("fecha") String fechaStr) {
-        if (fechaStr == null || fechaStr.isBlank()) {
+    @Path("/daily")
+    public Response getDailySnapshot(
+            @QueryParam("date") String dateStr
+    ) {
+
+        if (dateStr == null || dateStr.isBlank()) {
+
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("{\"mensaje\":\"Parámetro 'fecha' requerido en formato YYYY-MM-DD\"}")
+                    .entity("""
+                        {
+                          "message": "Parameter 'date' is required in YYYY-MM-DD format"
+                        }
+                        """)
                     .build();
         }
-        LocalDate fecha;
+
+        LocalDate date;
+
         try {
-            fecha = LocalDate.parse(fechaStr);
+
+            date = LocalDate.parse(dateStr);
+
         } catch (DateTimeParseException e) {
+
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("{\"mensaje\":\"Formato de fecha inválido. Usa YYYY-MM-DD\"}")
+                    .entity("""
+                        {
+                          "message": "Invalid date format. Use YYYY-MM-DD"
+                        }
+                        """)
                     .build();
         }
-        List<IrsaResponse> resultado = service.obtenerSnapshotDiario(fecha);
-        return Response.ok(resultado).build();
+
+        List<IrsaResponse> result = service.getDailySnapshot(date);
+
+        return Response.ok(result).build();
     }
 }

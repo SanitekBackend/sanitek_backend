@@ -1,36 +1,68 @@
 package org.acme.domain.entity;
 
 import jakarta.persistence.*;
-import org.acme.domain.enums.NivelRiesgo;
 import java.time.Instant;
 
 @Entity
-@Table(name = "irsa",
-        indexes = @Index(name = "idx_irsa_alcaldia_fecha", columnList = "id_alcaldia, fecha_calculo"))
-@AttributeOverride(name = "id", column = @Column(name = "id_irsa"))
+@Table(name = "irsa")
 public class Irsa extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_alcaldia", nullable = false)
-    public Alcaldia alcaldia;
+    @JoinColumn(name = "municipality_id", nullable = false)
+    private Municipality municipality;
 
-    @Column(name = "valor_irsa", nullable = false)
-    public Float valorIrsa;
+    @Column(name = "irsa_value", nullable = false)
+    private Float irsaValue;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "nivel_riesgo", nullable = false, length = 20)
-    public NivelRiesgo nivelRiesgo;
+    @Column(name = "risk_level", nullable = false, length = 50)
+    private String riskLevel;
 
-    @Column(name = "fecha_calculo", nullable = false)
-    public Instant fechaCalculo = Instant.now();
+    @Column(name = "is_forecast", nullable = false)
+    private Boolean isForecast = false;
 
-    @Column(name = "prediccion_futura")
-    public Float prediccionFutura;
+    @Column(name = "forecast_date")
+    private Instant forecastDate;
 
-    @Column(name = "fecha_prediccion")
-    public Instant fechaPrediccion;
+    public Irsa() {
+    }
 
-    // 'SCHEDULER' 
-    @Column(name = "origen_calculo", length = 50)
-    public String origenCalculo = "SCHEDULER";
+    public Municipality getMunicipality() {
+        return municipality;
+    }
+
+    public void setMunicipality(Municipality municipality) {
+        this.municipality = municipality;
+    }
+
+    public Float getIrsaValue() {
+        return irsaValue;
+    }
+
+    public void setIrsaValue(Float irsaValue) {
+        this.irsaValue = irsaValue;
+    }
+
+    public String getRiskLevel() {
+        return riskLevel;
+    }
+
+    public void setRiskLevel(String riskLevel) {
+        this.riskLevel = riskLevel;
+    }
+
+    public Boolean getIsForecast() {
+        return isForecast;
+    }
+
+    public void setIsForecast(Boolean isForecast) {
+        this.isForecast = isForecast;
+    }
+
+    public Instant getForecastDate() {
+        return forecastDate;
+    }
+
+    public void setForecastDate(Instant forecastDate) {
+        this.forecastDate = forecastDate;
+    }
 }
