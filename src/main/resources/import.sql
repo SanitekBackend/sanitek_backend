@@ -10,7 +10,7 @@ INSERT IGNORE INTO pollutant_unit (id, notation, created_at, updated_at) VALUES
 (2, 'C', NOW(), NOW());
 
 -- Pollutants
-INSERT IGNORE INTO pollutant (id, nomenclature, name, pollutant_unit, created_at, updated_at) VALUES
+INSERT IGNORE INTO pollutant (id, nomenclature, name, pollutant_unit_id, created_at, updated_at) VALUES
 (1, 'NO2', 'Nitrogen Dioxide', 1, NOW(), NOW()),
 (2, 'O3', 'Ozone', 1, NOW(), NOW()),
 (3, 'PM2.5', 'Particulate Matter 2.5', 1, NOW(), NOW());

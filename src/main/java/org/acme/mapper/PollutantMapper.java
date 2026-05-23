@@ -3,7 +3,7 @@ package org.acme.mapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.acme.domain.entity.NO2;
 import org.acme.domain.entity.O3;
-import org.acme.domain.entity.PM_2_5;
+import org.acme.domain.entity.PM25;
 import org.acme.domain.entity.Pollutant;
 import org.acme.dto.response.MeasurementResponse;
 import org.acme.dto.response.MunicipalitySummary;
@@ -48,7 +48,7 @@ public class PollutantMapper {
         );
     }
 
-    public MeasurementResponse toMeasurementResponse(PM_2_5 pm25) {
+    public MeasurementResponse toMeasurementResponse(PM25 pm25) {
         return new MeasurementResponse(
                 pm25.getId(),
                 toStationResponse(pm25.getStation()),

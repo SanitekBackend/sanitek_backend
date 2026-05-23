@@ -12,7 +12,7 @@ public abstract class HealthRecordEntity {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "municipality_id", nullable = false)
+    @JoinColumn(name = "municipality_id")
     private Municipality municipality;
 
     @Column(name = "age", nullable = false)

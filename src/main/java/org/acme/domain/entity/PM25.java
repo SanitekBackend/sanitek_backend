@@ -4,17 +4,17 @@ import jakarta.persistence.*;
 
 @Entity
 @Table(name = "pm25")
-public class PM_2_5 extends PollutantMeasurementEntity {
+public class PM25 extends PollutantMeasurementEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "station_id", nullable = false)
+    @JoinColumn(name = "station_id")
     private Station station;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "pollutant_id", nullable = false)
+    @JoinColumn(name = "pollutant_id")
     private Pollutant pollutant;
 
-    public PM_2_5() {
+    public PM25() {
     }
 
     public Station getStation() {

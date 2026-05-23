@@ -7,11 +7,11 @@ import jakarta.persistence.*;
 public class NO2 extends PollutantMeasurementEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "station_id", nullable = false)
+    @JoinColumn(name = "station_id")
     private Station station;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "pollutant_id", nullable = false)
+    @JoinColumn(name = "pollutant_id")
     private Pollutant pollutant;
 
     public NO2() {

@@ -7,7 +7,7 @@ import org.acme.domain.entity.Irsa;
 import org.acme.domain.entity.Municipality;
 import org.acme.domain.entity.NO2;
 import org.acme.domain.entity.O3;
-import org.acme.domain.entity.PM_2_5;
+import org.acme.domain.entity.PM25;
 import org.acme.domain.entity.Temperature;
 import org.acme.domain.irsa.IrsaEngine;
 import org.acme.domain.irsa.IrsaResult;
@@ -123,7 +123,7 @@ public class IrsaService {
 
         List<NO2>   no2List   = no2Repository.findByStationsAndDateRange(stationIds, from, to);
         List<O3>    o3List    = o3Repository.findByStationsAndDateRange(stationIds, from, to);
-        List<PM_2_5> pm25List = pm25Repository.findByStationsAndDateRange(stationIds, from, to);
+        List<PM25> pm25List = pm25Repository.findByStationsAndDateRange(stationIds, from, to);
         List<Temperature> temps = temperatureRepository.findLatestByStations(stationIds);
 
         Map<String, Double> avgByPollutant = new java.util.LinkedHashMap<>();
@@ -131,7 +131,7 @@ public class IrsaService {
                 .ifPresent(v -> avgByPollutant.put("NO2", v));
         computeAverage(o3List.stream().map(O3::getMetricValue).toList())
                 .ifPresent(v -> avgByPollutant.put("O3", v));
-        computeAverage(pm25List.stream().map(PM_2_5::getMetricValue).toList())
+        computeAverage(pm25List.stream().map(PM25::getMetricValue).toList())
                 .ifPresent(v -> avgByPollutant.put("PM2.5", v));
 
         double airScore    = calculateAirScore(stationIds, from, to);
@@ -308,7 +308,7 @@ public class IrsaService {
 
         List<NO2>    no2List  = no2Repository.findByStationsAndDateRange(stationIds, from, to);
         List<O3>     o3List   = o3Repository.findByStationsAndDateRange(stationIds, from, to);
-        List<PM_2_5> pm25List = pm25Repository.findByStationsAndDateRange(stationIds, from, to);
+        List<PM25> pm25List = pm25Repository.findByStationsAndDateRange(stationIds, from, to);
 
         if (no2List.isEmpty() && o3List.isEmpty() && pm25List.isEmpty()) {
             LOG.warn("[IRSA] Air: no measurements in last 24h, using neutral 50.0");
@@ -321,7 +321,7 @@ public class IrsaService {
                 .ifPresent(avg -> scores.add(Math.max(0, 100 - avg / 2.1)));
         computeAverage(o3List.stream().map(O3::getMetricValue).toList())
                 .ifPresent(avg -> scores.add(Math.max(0, 100 - avg / 1.4)));
-        computeAverage(pm25List.stream().map(PM_2_5::getMetricValue).toList())
+        computeAverage(pm25List.stream().map(PM25::getMetricValue).toList())
                 .ifPresent(avg -> scores.add(Math.max(0, 100 - avg / 0.45)));
 
         return scores.isEmpty() ? 50.0 : scores.stream().mapToDouble(Double::doubleValue).average().orElse(50.0);

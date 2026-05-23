@@ -7,7 +7,7 @@ import jakarta.persistence.*;
 public class Temperature extends PollutantMeasurementEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "station_id", nullable = false)
+    @JoinColumn(name = "station_id")
     private Station station;
 
     public Temperature() {
