@@ -2,7 +2,6 @@ package org.acme.domain.entity;
 
 import jakarta.persistence.*;
 
-import java.awt.*;
 import java.util.List;
 
 @Entity
@@ -22,16 +21,16 @@ public class Municipality extends BaseEntity {
     private List<Station> stations;
 
     @OneToMany(mappedBy = "municipality", fetch = FetchType.LAZY)
-    private List<Copd> copd_patients;
+    private List<Copd> copdPatients;
 
     @OneToMany(mappedBy = "municipality", fetch = FetchType.LAZY)
-    private List<Asthma> asthma_patients;
+    private List<Asthma> asthmaPatients;
 
     @OneToMany(mappedBy = "municipality", fetch = FetchType.LAZY)
-    private List<Pneumonia> pneumonia_patients;
+    private List<Pneumonia> pneumoniaPatients;
 
     @OneToMany(mappedBy = "municipality", fetch = FetchType.LAZY)
-    private List<Smoking> smoking_patients;
+    private List<Smoking> smokingPatients;
 
 
     public Municipality() {
@@ -70,34 +69,34 @@ public class Municipality extends BaseEntity {
     }
 
     public List<Copd> getCopdPatients() {
-        return copd_patients;
+        return copdPatients;
     }
 
     public void setCopdPatients(List<Copd> copdPatients) {
-        this.copd_patients = copdPatients;
+        this.copdPatients = copdPatients;
     }
 
     public List<Asthma> getAsthmaPatients() {
-        return asthma_patients;
+        return asthmaPatients;
     }
 
     public void setAsthmaPatients(List<Asthma> asthmaPatients) {
-        this.asthma_patients = asthmaPatients;
+        this.asthmaPatients = asthmaPatients;
     }
 
     public List<Pneumonia> getPneumoniaPatients() {
-        return pneumonia_patients;
+        return pneumoniaPatients;
     }
 
     public void setPneumoniaPatients(List<Pneumonia> pneumoniaPatients) {
-        this.pneumonia_patients = pneumoniaPatients;
+        this.pneumoniaPatients = pneumoniaPatients;
     }
 
     public List<Smoking> getSmokingPatients(){
-        return smoking_patients;
+        return smokingPatients;
     }
 
-    public void setSmokingPatients(List<Smoking> smoking_patients){
-        this.smoking_patients = smoking_patients;
+    public void setSmokingPatients(List<Smoking> smokingPatients){
+        this.smokingPatients = smokingPatients;
     }
 }

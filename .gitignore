@@ -42,6 +42,8 @@ nb-configuration.xml
 # Firebase — credenciales privadas, NUNCA commitear
 *service-account*.json
 firebase-*.json
+*firebase-adminsdk*.json
+/secrets/
 
 # Plugin directory
 /.quarkus/cli/plugins/

@@ -1,7 +1,6 @@
 package org.acme.domain.entity;
 
 import jakarta.persistence.*;
-import org.checkerframework.checker.units.qual.N;
 
 import java.util.List;
 
@@ -68,7 +67,7 @@ public class Pollutant extends BaseEntity {
         return no2s;
     }
 
-    public void setNO2s(List<NO2> no2s) {
+    public void setNo2s(List<NO2> no2s) {
         this.no2s = no2s;
     }
 

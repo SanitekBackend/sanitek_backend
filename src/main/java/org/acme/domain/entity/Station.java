@@ -78,7 +78,7 @@ public class Station extends BaseEntity {
         return no2s;
     }
 
-    public void setNO2s(List<NO2> no2s) {
+    public void setNo2s(List<NO2> no2s) {
         this.no2s = no2s;
     }
 

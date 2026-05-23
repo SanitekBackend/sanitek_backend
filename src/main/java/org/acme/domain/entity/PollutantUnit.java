@@ -11,7 +11,7 @@ public class PollutantUnit extends BaseEntity {
     @Column(name = "notation", unique = true, length = 30)
     private String notation;
 
-    @OneToMany(mappedBy = "pollutant_unit", fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "pollutantUnit", fetch = FetchType.LAZY)
     private List<Pollutant> pollutants;
 
     public PollutantUnit(){
@@ -23,5 +23,13 @@ public class PollutantUnit extends BaseEntity {
 
     public void setNotation(String notation){
         this.notation = notation;
+    }
+
+    public List<Pollutant> getPollutants() {
+        return pollutants;
+    }
+
+    public void setPollutants(List<Pollutant> pollutants) {
+        this.pollutants = pollutants;
     }
 }
