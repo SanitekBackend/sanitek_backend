@@ -23,6 +23,10 @@ public class AppException extends RuntimeException {
         return new AppException(message, Response.Status.BAD_REQUEST);
     }
 
+    public static AppException unauthorized(String message) {
+        return new AppException(message, Response.Status.UNAUTHORIZED);
+    }
+
     public static AppException forbidden(String message) {
         return new AppException(message, Response.Status.FORBIDDEN);
     }

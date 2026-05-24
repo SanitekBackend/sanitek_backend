@@ -42,12 +42,14 @@ public class UserService {
         return userMapper.toResponse(user);
     }
 
+    @Transactional
     public UserResponse getByFirebaseUid(String firebaseUid) {
         return userRepository.findByFirebaseUid(firebaseUid)
                 .map(userMapper::toResponse)
                 .orElseThrow(() -> AppException.notFound("User not found"));
     }
 
+    @Transactional
     public UserResponse getById(Long id) {
         return userRepository.findByIdOptional(id)
                 .map(userMapper::toResponse)
@@ -64,6 +66,7 @@ public class UserService {
         return userMapper.toResponse(user);
     }
 
+    @Transactional
     public List<UserResponse> listAll() {
         return userRepository.listAll().stream()
                 .map(userMapper::toResponse)
