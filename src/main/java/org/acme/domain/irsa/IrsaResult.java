@@ -1,0 +1,27 @@
+package org.acme.domain.irsa;
+
+import java.time.Instant;
+
+public record IrsaResult(
+        double  normNo2,
+        double  normO3,
+        double  normPm25,
+        double  normUv,
+        double  normTmp,
+        double  contaminantes,
+        double  prevCopd,
+        double  prevAsthma,
+        double  prevPneumonia,
+        double  prevSmoking,
+        double  factorVulnerabilidad,
+        double  irsaScore,
+        String  riskLevel,
+        Instant calculatedAt
+) {
+    public static String categorize(double score) {
+        if (score <= 25.0) return "LOW";
+        if (score <= 50.0) return "MODERATE";
+        if (score <= 75.0) return "HIGH";
+        return "CRITICAL";
+    }
+}
