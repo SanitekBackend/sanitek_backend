@@ -8,21 +8,26 @@ import org.acme.domain.entity.Municipality;
 import org.acme.domain.entity.NO2;
 import org.acme.domain.entity.O3;
 import org.acme.domain.entity.PM25;
+import org.acme.domain.entity.Radiation;
 import org.acme.domain.entity.Temperature;
 import org.acme.domain.irsa.IrsaEngine;
 import org.acme.domain.irsa.IrsaResult;
-import org.acme.domain.irsa.IrsaWeightConfig;
 import org.acme.dto.response.IrsaDiagnosticResponse;
 import org.acme.dto.response.IrsaResponse;
 import org.acme.dto.response.IrsaTrendResponse;
 import org.acme.dto.response.TrendPoint;
 import org.acme.exception.AppException;
 import org.acme.mapper.IrsaMapper;
+import org.acme.repository.AsthmaRepository;
+import org.acme.repository.CopdRepository;
 import org.acme.repository.IrsaRepository;
 import org.acme.repository.MunicipalityRepository;
 import org.acme.repository.NO2Repository;
 import org.acme.repository.O3Repository;
 import org.acme.repository.PM25Repository;
+import org.acme.repository.PneumoniaRepository;
+import org.acme.repository.RadiationRepository;
+import org.acme.repository.SmokingRepository;
 import org.acme.repository.StationRepository;
 import org.acme.repository.TemperatureRepository;
 import org.jboss.logging.Logger;
@@ -33,10 +38,10 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -45,15 +50,21 @@ public class IrsaService {
 
     private static final Logger LOG = Logger.getLogger(IrsaService.class);
 
-    @Inject IrsaRepository irsaRepository;
+    @Inject IrsaRepository         irsaRepository;
     @Inject MunicipalityRepository municipalityRepository;
-    @Inject StationRepository stationRepository;
-    @Inject NO2Repository no2Repository;
-    @Inject O3Repository o3Repository;
-    @Inject PM25Repository pm25Repository;
-    @Inject TemperatureRepository temperatureRepository;
-    @Inject HealthService healthService;
-    @Inject IrsaMapper irsaMapper;
+    @Inject StationRepository      stationRepository;
+    @Inject NO2Repository          no2Repository;
+    @Inject O3Repository           o3Repository;
+    @Inject PM25Repository         pm25Repository;
+    @Inject RadiationRepository    radiationRepository;
+    @Inject TemperatureRepository  temperatureRepository;
+    @Inject CopdRepository         copdRepository;
+    @Inject AsthmaRepository       asthmaRepository;
+    @Inject PneumoniaRepository    pneumoniaRepository;
+    @Inject SmokingRepository      smokingRepository;
+    @Inject IrsaMapper             irsaMapper;
+
+    private final IrsaEngine engine = new IrsaEngine();
 
     public IrsaResponse getLatestByMunicipality(Long municipalityId) {
         return irsaRepository.findLatestByMunicipality(municipalityId)
@@ -89,24 +100,42 @@ public class IrsaService {
 
         List<Long> stationIds = stationRepository.findIdsByMunicipality(municipalityId);
 
-        double airScore    = calculateAirScore(stationIds, from, to);
-        double climateScore = calculateClimateScore(stationIds);
-        double socioScore  = calculateSocioScore(municipality);
-        double healthScore = healthService.calculateHealthScore(municipalityId);
+        double avgNo2  = averagePollutant(
+                no2Repository.findByStationsAndDateRange(stationIds, from, to)
+                        .stream().map(NO2::getMetricValue).toList());
 
-        IrsaEngine engine = new IrsaEngine(IrsaWeightConfig.defaults());
-        IrsaResult result = engine.calculate(airScore, climateScore, socioScore, healthScore);
-        float irsaValue   = (float) Math.max(0.0, Math.min(1.0, 1.0 - result.score() / 100.0));
+        double avgO3   = averagePollutant(
+                o3Repository.findByStationsAndDateRange(stationIds, from, to)
+                        .stream().map(O3::getMetricValue).toList());
 
-        LOG.infof("[IRSA] Municipality=%s | air=%.2f | climate=%.2f | socio=%.2f | health=%.2f | score=%.2f | irsaValue=%.4f | level=%s",
-                municipality.getMunicipalityName(), airScore, climateScore, socioScore, healthScore,
-                result.score(), irsaValue, calculateLevel(irsaValue));
+        double avgPm25 = averagePollutant(
+                pm25Repository.findByStationsAndDateRange(stationIds, from, to)
+                        .stream().map(PM25::getMetricValue).toList());
 
-        Irsa irsa = new Irsa();
-        irsa.setMunicipality(municipality);
-        irsa.setIrsaValue(irsaValue);
-        irsa.setRiskLevel(calculateLevel(irsaValue));
-        irsa.setIsForecast(false);
+        double avgUv   = averagePollutant(
+                radiationRepository.findByStationsAndDateRange(stationIds, from, to)
+                        .stream().map(Radiation::getMetricValue).toList());
+
+        double avgTmp  = averagePollutant(
+                temperatureRepository.findByStationsAndDateRange(stationIds, from, to)
+                        .stream().map(Temperature::getMetricValue).toList());
+
+        long copdCount      = copdRepository.countByMunicipality(municipalityId);
+        long asthmaCount    = asthmaRepository.countTotalByMunicipality(municipalityId);
+        long pneumoniaCount = pneumoniaRepository.countTotalByMunicipality(municipalityId);
+        long smokingCount   = smokingRepository.countTotalByMunicipality(municipalityId);
+
+        IrsaResult result = engine.calculate(
+                avgNo2, avgO3, avgPm25, avgUv, avgTmp,
+                copdCount, asthmaCount, pneumoniaCount, smokingCount);
+
+        LOG.infof("[IRSA] Municipio=%s | NO2=%.4f O3=%.4f PM25=%.4f UV=%.4f TMP=%.4f | C=%.4f | FV=%.4f | IRSA=%.2f | Nivel=%s",
+                municipality.getMunicipalityName(),
+                result.normNo2(), result.normO3(), result.normPm25(), result.normUv(), result.normTmp(),
+                result.pollutantScore(), result.vulnerabilityFactor(),
+                result.irsaScore(), result.riskLevel());
+
+        Irsa irsa = buildIrsa(municipality, result);
         irsaRepository.persist(irsa);
 
         return irsaMapper.toResponse(irsa);
@@ -121,38 +150,52 @@ public class IrsaService {
 
         List<Long> stationIds = stationRepository.findIdsByMunicipality(municipalityId);
 
-        List<NO2>   no2List   = no2Repository.findByStationsAndDateRange(stationIds, from, to);
-        List<O3>    o3List    = o3Repository.findByStationsAndDateRange(stationIds, from, to);
-        List<PM25> pm25List = pm25Repository.findByStationsAndDateRange(stationIds, from, to);
-        List<Temperature> temps = temperatureRepository.findLatestByStations(stationIds);
+        List<NO2>         no2List  = no2Repository.findByStationsAndDateRange(stationIds, from, to);
+        List<O3>          o3List   = o3Repository.findByStationsAndDateRange(stationIds, from, to);
+        List<PM25>        pm25List = pm25Repository.findByStationsAndDateRange(stationIds, from, to);
+        List<Radiation>   uvList   = radiationRepository.findByStationsAndDateRange(stationIds, from, to);
+        List<Temperature> tmpList  = temperatureRepository.findByStationsAndDateRange(stationIds, from, to);
 
-        Map<String, Double> avgByPollutant = new java.util.LinkedHashMap<>();
-        computeAverage(no2List.stream().map(NO2::getMetricValue).toList())
-                .ifPresent(v -> avgByPollutant.put("NO2", v));
-        computeAverage(o3List.stream().map(O3::getMetricValue).toList())
-                .ifPresent(v -> avgByPollutant.put("O3", v));
-        computeAverage(pm25List.stream().map(PM25::getMetricValue).toList())
-                .ifPresent(v -> avgByPollutant.put("PM2.5", v));
+        double avgNo2  = averagePollutant(no2List.stream().map(NO2::getMetricValue).toList());
+        double avgO3   = averagePollutant(o3List.stream().map(O3::getMetricValue).toList());
+        double avgPm25 = averagePollutant(pm25List.stream().map(PM25::getMetricValue).toList());
+        double avgUv   = averagePollutant(uvList.stream().map(Radiation::getMetricValue).toList());
+        double avgTmp  = averagePollutant(tmpList.stream().map(Temperature::getMetricValue).toList());
 
-        double airScore    = calculateAirScore(stationIds, from, to);
-        double climateScore = calculateClimateScore(stationIds);
-        double socioScore  = calculateSocioScore(municipality);
-        double healthScore = healthService.calculateHealthScore(municipalityId);
+        long copdCount      = copdRepository.countByMunicipality(municipalityId);
+        long asthmaCount    = asthmaRepository.countTotalByMunicipality(municipalityId);
+        long pneumoniaCount = pneumoniaRepository.countTotalByMunicipality(municipalityId);
+        long smokingCount   = smokingRepository.countTotalByMunicipality(municipalityId);
 
-        IrsaEngine engine = new IrsaEngine(IrsaWeightConfig.defaults());
-        IrsaResult result = engine.calculate(airScore, climateScore, socioScore, healthScore);
-        double irsaValue  = Math.max(0.0, Math.min(1.0, 1.0 - result.score() / 100.0));
+        IrsaResult r = engine.calculate(
+                avgNo2, avgO3, avgPm25, avgUv, avgTmp,
+                copdCount, asthmaCount, pneumoniaCount, smokingCount);
 
         return new IrsaDiagnosticResponse(
                 municipalityId,
                 municipality.getMunicipalityName(),
-                airScore, climateScore, socioScore, healthScore,
-                result.score(), irsaValue,
-                calculateLevel((float) irsaValue),
-                no2List.size(), o3List.size(), pm25List.size(),
-                avgByPollutant,
-                !temps.isEmpty(),
-                municipality.getSocialVulnerability()
+                r.normNo2(),
+                r.normO3(),
+                r.normPm25(),
+                r.normUv(),
+                r.normTmp(),
+                r.pollutantScore(),
+                r.prevCopd(),
+                r.prevAsthma(),
+                r.prevPneumonia(),
+                r.prevSmoking(),
+                r.vulnerabilityFactor(),
+                r.irsaScore(),
+                r.riskLevel(),
+                no2List.size(),
+                o3List.size(),
+                pm25List.size(),
+                uvList.size(),
+                tmpList.size(),
+                copdCount,
+                asthmaCount,
+                pneumoniaCount,
+                smokingCount
         );
     }
 
@@ -174,6 +217,8 @@ public class IrsaService {
         }
 
         ZoneId cdmx = ZoneId.of("America/Mexico_City");
+        String[] months = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+
         Map<String, List<Irsa>> grouped = new TreeMap<>(records.stream()
                 .collect(Collectors.groupingBy(i -> {
                     ZonedDateTime zdt = i.getCreatedAt().atZone(cdmx);
@@ -186,17 +231,17 @@ public class IrsaService {
                     }
                 })));
 
-        String[] months = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
-
         List<TrendPoint> points = grouped.entrySet().stream()
                 .map(e -> {
                     List<Double> values = e.getValue().stream()
-                            .map(i -> (double) i.getIrsaValue()).toList();
+                            .filter(i -> i.getIrsaValue() != null)
+                            .map(i -> (double) i.getIrsaValue())
+                            .toList();
                     double avg = values.stream().mapToDouble(Double::doubleValue).average().orElse(0);
                     double min = values.stream().mapToDouble(Double::doubleValue).min().orElse(0);
                     double max = values.stream().mapToDouble(Double::doubleValue).max().orElse(0);
 
-                    String key   = e.getKey();
+                    String key = e.getKey();
                     String label;
                     if (monthly) {
                         int yr = Integer.parseInt(key.substring(0, 4));
@@ -206,8 +251,7 @@ public class IrsaService {
                         label = "W" + key.substring(6) + " (" + key.substring(0, 4) + ")";
                     }
 
-                    return new TrendPoint(label, avg, min, max,
-                            calculateLevel((float) avg), values.size());
+                    return new TrendPoint(label, avg, min, max, IrsaResult.categorize(avg), values.size());
                 })
                 .toList();
 
@@ -215,8 +259,8 @@ public class IrsaService {
         String trend     = "STABLE";
         if (points.size() >= 2) {
             variation = points.getLast().avgIrsa() - points.getFirst().avgIrsa();
-            if      (variation >  0.05) trend = "WORSENING";
-            else if (variation < -0.05) trend = "IMPROVING";
+            if      (variation >  5.0) trend = "WORSENING";
+            else if (variation < -5.0) trend = "IMPROVING";
         }
 
         return new IrsaTrendResponse(municipalityId, municipality.getMunicipalityName(),
@@ -249,10 +293,10 @@ public class IrsaService {
 
     @Transactional
     public void generateForecasts(int daysAhead) {
-        ZoneId cdmx   = ZoneId.of("America/Mexico_City");
-        LocalDate today = LocalDate.now(cdmx);
-        Instant since7  = today.minusDays(7).atStartOfDay(cdmx).toInstant();
-        Instant now     = Instant.now();
+        ZoneId    cdmx   = ZoneId.of("America/Mexico_City");
+        LocalDate today  = LocalDate.now(cdmx);
+        Instant   since7 = today.minusDays(7).atStartOfDay(cdmx).toInstant();
+        Instant   now    = Instant.now();
 
         Instant rangeStart = today.plusDays(1).atStartOfDay(cdmx).toInstant();
         Instant rangeEnd   = today.plusDays(daysAhead + 1).atStartOfDay(cdmx).toInstant();
@@ -263,16 +307,20 @@ public class IrsaService {
         int generated = 0;
 
         for (Municipality municipality : municipalities) {
-            List<Irsa> history = irsaRepository.findHistoricalNoForecast(municipality.getId(), since7, now);
+            List<Irsa> history = irsaRepository.findHistoricalNoForecast(
+                    municipality.getId(), since7, now);
+
             if (history.isEmpty()) {
-                LOG.warnf("[FORECAST] No history for municipality %s, skipping", municipality.getMunicipalityName());
+                LOG.warnf("[FORECAST] No history for municipality '%s', skipping",
+                        municipality.getMunicipalityName());
                 continue;
             }
 
             float avgIrsa = (float) history.stream()
+                    .filter(i -> i.getIrsaValue() != null)
                     .mapToDouble(i -> i.getIrsaValue())
                     .average()
-                    .orElse(0.5);
+                    .orElse(50.0);
 
             for (int d = 1; d <= daysAhead; d++) {
                 LocalDate targetDate = today.plusDays(d);
@@ -280,7 +328,7 @@ public class IrsaService {
                 Irsa forecast = new Irsa();
                 forecast.setMunicipality(municipality);
                 forecast.setIrsaValue(avgIrsa);
-                forecast.setRiskLevel(calculateLevel(avgIrsa));
+                forecast.setRiskLevel(IrsaResult.categorize(avgIrsa));
                 forecast.setIsForecast(true);
                 forecast.setForecastDate(targetDate.atStartOfDay(cdmx).toInstant());
                 irsaRepository.persist(forecast);
@@ -290,86 +338,41 @@ public class IrsaService {
         LOG.infof("[FORECAST] Generated %d forecasts for the next %d days", generated, daysAhead);
     }
 
-    // ─── Private helpers ─────────────────────────────────────────────────────────
-
-    private String calculateLevel(float value) {
-        if (value <= 0.25f) return "LOW";
-        if (value <= 0.50f) return "MODERATE";
-        if (value <= 0.75f) return "HIGH";
-        return "CRITICAL";
-    }
-
-    private double calculateAirScore(List<Long> stationIds, Instant from, Instant to) {
-        if (stationIds.isEmpty()) {
-            LOG.warn("[IRSA] Air: no stations, using neutral 50.0");
-            return 50.0;
-        }
-
-        List<NO2>    no2List  = no2Repository.findByStationsAndDateRange(stationIds, from, to);
-        List<O3>     o3List   = o3Repository.findByStationsAndDateRange(stationIds, from, to);
-        List<PM25> pm25List = pm25Repository.findByStationsAndDateRange(stationIds, from, to);
-
-        if (no2List.isEmpty() && o3List.isEmpty() && pm25List.isEmpty()) {
-            LOG.warn("[IRSA] Air: no measurements in last 24h, using neutral 50.0");
-            return 50.0;
-        }
-
-        List<Double> scores = new ArrayList<>();
-
-        computeAverage(no2List.stream().map(NO2::getMetricValue).toList())
-                .ifPresent(avg -> scores.add(Math.max(0, 100 - avg / 2.1)));
-        computeAverage(o3List.stream().map(O3::getMetricValue).toList())
-                .ifPresent(avg -> scores.add(Math.max(0, 100 - avg / 1.4)));
-        computeAverage(pm25List.stream().map(PM25::getMetricValue).toList())
-                .ifPresent(avg -> scores.add(Math.max(0, 100 - avg / 0.45)));
-
-        return scores.isEmpty() ? 50.0 : scores.stream().mapToDouble(Double::doubleValue).average().orElse(50.0);
-    }
-
-    private double calculateClimateScore(List<Long> stationIds) {
-        if (stationIds.isEmpty()) return 50.0;
-
-        List<Temperature> temps = temperatureRepository.findLatestByStations(stationIds);
-        if (temps.isEmpty()) {
-            LOG.warn("[IRSA] Climate: no temperature data, using neutral 50.0");
-            return 50.0;
-        }
-
-        java.util.OptionalDouble avgTemp = temps.stream()
-                .mapToDouble(t -> parseDouble(t.getMetricValue()))
-                .filter(v -> !Double.isNaN(v))
-                .average();
-
-        if (avgTemp.isEmpty()) return 50.0;
-
-        // Optimal CDMX: 16-22°C, penalty 5 pts/°C from 19
-        double score = 100 - Math.min(100, Math.abs(avgTemp.getAsDouble() - 19.0) * 5);
-        return Math.max(0, score);
-    }
-
-    private double calculateSocioScore(Municipality municipality) {
-        if (municipality.getSocialVulnerability() == null) {
-            LOG.warnf("[IRSA] Socio: no social vulnerability for '%s', using neutral 50.0",
-                    municipality.getMunicipalityName());
-            return 50.0;
-        }
-        // CONEVAL index: [-2, 2] where lower = better → map to [100, 0]
-        float v = municipality.getSocialVulnerability();
-        double score = 100.0 - ((v + 2.0) / 4.0) * 100.0;
-        return Math.max(0, Math.min(100, score));
-    }
-
-    private java.util.Optional<Double> computeAverage(List<String> values) {
-        java.util.OptionalDouble avg = values.stream()
+    private double averagePollutant(List<String> values) {
+        if (values == null || values.isEmpty()) return 0.0;
+        OptionalDouble avg = values.stream()
                 .mapToDouble(this::parseDouble)
-                .filter(v -> !Double.isNaN(v))
+                .filter(v -> !Double.isNaN(v) && v >= 0.0)
                 .average();
-        return avg.isPresent() ? java.util.Optional.of(avg.getAsDouble()) : java.util.Optional.empty();
+        return avg.isPresent() ? avg.getAsDouble() : 0.0;
     }
 
     private double parseDouble(String value) {
         if (value == null || value.isBlank()) return Double.NaN;
-        try { return Double.parseDouble(value.trim()); }
-        catch (NumberFormatException e) { return Double.NaN; }
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException e) {
+            return Double.NaN;
+        }
+    }
+
+    private Irsa buildIrsa(Municipality municipality, IrsaResult r) {
+        Irsa irsa = new Irsa();
+        irsa.setMunicipality(municipality);
+        irsa.setIrsaValue((float) r.irsaScore());
+        irsa.setRiskLevel(r.riskLevel());
+        irsa.setIsForecast(false);
+        irsa.setNormNo2(r.normNo2());
+        irsa.setNormO3(r.normO3());
+        irsa.setNormPm25(r.normPm25());
+        irsa.setNormUv(r.normUv());
+        irsa.setNormTmp(r.normTmp());
+        irsa.setPollutantScore(r.pollutantScore());
+        irsa.setPrevCopd(r.prevCopd());
+        irsa.setPrevAsthma(r.prevAsthma());
+        irsa.setPrevPneumonia(r.prevPneumonia());
+        irsa.setPrevSmoking(r.prevSmoking());
+        irsa.setVulnerabilityFactor(r.vulnerabilityFactor());
+        return irsa;
     }
 }

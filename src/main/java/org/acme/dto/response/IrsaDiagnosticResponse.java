@@ -1,21 +1,33 @@
 package org.acme.dto.response;
 
-import java.util.Map;
-
 public record IrsaDiagnosticResponse(
-        Long municipalityId,
+        Long   municipalityId,
         String municipalityName,
-        double airScore,
-        double climateScore,
-        double socioScore,
-        double healthScore,
-        double weightedScore,
-        double irsaValue,
+
+        double normNo2,
+        double normO3,
+        double normPm25,
+        double normUv,
+        double normTmp,
+        double pollutantScore,
+
+        double prevCopd,
+        double prevAsthma,
+        double prevPneumonia,
+        double prevSmoking,
+
+        double vulnerabilityFactor,
+
+        double irsaScore,
         String riskLevel,
-        int no2Measurements,
-        int o3Measurements,
-        int pm25Measurements,
-        Map<String, Double> averagesByPollutant,
-        boolean hasTemperatureData,
-        Float socialVulnerability
+
+        int  no2Measurements,
+        int  o3Measurements,
+        int  pm25Measurements,
+        int  uvMeasurements,
+        int  tmpMeasurements,
+        long copdCount,
+        long asthmaCount,
+        long pneumoniaCount,
+        long smokingCount
 ) {}

@@ -14,7 +14,12 @@ public class CopdRepository implements PanacheRepository<Copd> {
         return find("municipality.id", municipalityId).list();
     }
 
+    //total de registros EPOC de una alcaldia
     public long countByMunicipalityAndSince(Long municipalityId, Instant since) {
         return count("municipality.id = ?1 AND registeredAt >= ?2", municipalityId, since);
+    }
+
+    public long countByMunicipality(Long municipalityId) {
+        return count("municipality.id", municipalityId);
     }
 }

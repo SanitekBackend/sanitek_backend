@@ -3,18 +3,25 @@ package org.acme.domain.irsa;
 import java.time.Instant;
 
 public record IrsaResult(
-        double score,
-        String category,
+        double  normNo2,
+        double  normO3,
+        double  normPm25,
+        double  normUv,
+        double  normTmp,
+        double  pollutantScore,
+        double  prevCopd,
+        double  prevAsthma,
+        double  prevPneumonia,
+        double  prevSmoking,
+        double  vulnerabilityFactor,
+        double  irsaScore,
+        String  riskLevel,
         Instant calculatedAt
 ) {
-    public static IrsaResult of(double score, Instant calculatedAt) {
-        return new IrsaResult(score, categorize(score), calculatedAt);
-    }
-
-    private static String categorize(double score) {
-        if (score >= 80) return "BUENO";
-        if (score >= 60) return "MODERADO";
-        if (score >= 40) return "MALO";
-        return "MUY_MALO";
+    public static String categorize(double score) {
+        if (score <= 25.0) return "LOW";
+        if (score <= 50.0) return "MODERATE";
+        if (score <= 75.0) return "HIGH";
+        return "CRITICAL";
     }
 }

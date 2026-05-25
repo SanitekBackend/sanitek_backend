@@ -1,25 +1,23 @@
 package org.acme.domain.irsa;
 
-public class IrsaWeightConfig {
+public final class IrsaWeightConfig {
 
-    public final double airQualityWeight;
-    public final double climateWeight;
-    public final double socioeconomicWeight;
-    public final double healthWeight;
+    private IrsaWeightConfig() {}
 
-    public IrsaWeightConfig(double airQualityWeight, double climateWeight,
-                            double socioeconomicWeight, double healthWeight) {
-        if (Math.abs(airQualityWeight + climateWeight + socioeconomicWeight + healthWeight - 1.0) > 0.0001) {
-            throw new IllegalArgumentException("Los pesos deben sumar 1.0");
-        }
-        this.airQualityWeight    = airQualityWeight;
-        this.climateWeight       = climateWeight;
-        this.socioeconomicWeight = socioeconomicWeight;
-        this.healthWeight        = healthWeight;
-    }
+    public static final double W_NO2  = 0.35;
+    public static final double W_O3   = 0.30;
+    public static final double W_PM25 = 0.20;
+    public static final double W_UV   = 0.08;
+    public static final double W_TMP  = 0.07;
 
-    // Aire 35% | Clima 25% | Socioeconómico 20% | Salud 20%
-    public static IrsaWeightConfig defaults() {
-        return new IrsaWeightConfig(0.35, 0.25, 0.20, 0.20);
-    }
+    public static final double THRESHOLD_NO2  = 100.0;
+    public static final double THRESHOLD_O3   = 110.0;
+    public static final double THRESHOLD_PM25 = 45.0;
+    public static final double THRESHOLD_UV   = 11.0;
+    public static final double THRESHOLD_TMP  = 40.0;
+
+    public static final double W_COPD      = 0.35;
+    public static final double W_ASTHMA    = 0.30;
+    public static final double W_PNEUMONIA = 0.25;
+    public static final double W_SMOKING   = 0.10;
 }

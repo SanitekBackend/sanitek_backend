@@ -1,9 +1,13 @@
 package org.acme.rest;
 
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.acme.domain.irsa.IrsaEngine;
+import org.acme.domain.irsa.IrsaResult;
+import org.acme.dto.request.IrsaSimulateRequest;
 import org.acme.dto.response.IrsaDiagnosticResponse;
 import org.acme.dto.response.IrsaResponse;
 import org.acme.dto.response.IrsaTrendResponse;
@@ -21,6 +25,8 @@ public class IrsaResource {
 
     @Inject
     IrsaService service;
+
+    private final IrsaEngine engine = new IrsaEngine();
 
     @GET
     public List<IrsaResponse> listLatest() {
@@ -131,5 +137,21 @@ public class IrsaResource {
         List<IrsaResponse> result = service.getDailySnapshot(date);
 
         return Response.ok(result).build();
+    }
+
+    @POST
+    @Path("/simulate")
+    public IrsaResult simulate(@Valid IrsaSimulateRequest req) {
+        return engine.calculate(
+                req.avgNo2(),
+                req.avgO3(),
+                req.avgPm25(),
+                req.avgUv(),
+                req.avgTmp(),
+                req.copdCount(),
+                req.asthmaCount(),
+                req.pneumoniaCount(),
+                req.smokingCount()
+        );
     }
 }
