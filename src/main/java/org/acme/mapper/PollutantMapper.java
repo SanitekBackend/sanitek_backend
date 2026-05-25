@@ -10,6 +10,8 @@ import org.acme.dto.response.MunicipalitySummary;
 import org.acme.dto.response.PollutantResponse;
 import org.acme.dto.response.StationResponse;
 
+import java.util.List;
+
 @ApplicationScoped
 public class PollutantMapper {
 
@@ -19,12 +21,12 @@ public class PollutantMapper {
     }
 
     private StationResponse toStationResponse(org.acme.domain.entity.Station station) {
-        MunicipalitySummary municipality = station.getMunicipality() != null
-                ? new MunicipalitySummary(
-                        station.getMunicipality().getId(),
-                        station.getMunicipality().getMunicipalityName())
-                : null;
-        return new StationResponse(station.getId(), station.getStationShortName(), station.getStationName(), municipality);
+        List<MunicipalitySummary> municipalities = station.getMunicipalities() != null
+                ? station.getMunicipalities().stream()
+                        .map(m -> new MunicipalitySummary(m.getId(), m.getMunicipalityName()))
+                        .toList()
+                : List.of();
+        return new StationResponse(station.getId(), station.getStationShortName(), station.getStationName(), municipalities);
     }
 
     public MeasurementResponse toMeasurementResponse(NO2 no2) {

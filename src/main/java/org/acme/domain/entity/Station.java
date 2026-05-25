@@ -8,9 +8,8 @@ import java.util.List;
 @Table(name = "station")
 public class Station extends BaseEntity {
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "municipality_id")
-    private Municipality municipality;
+    @ManyToMany(mappedBy = "stations", fetch = FetchType.LAZY)
+    private List<Municipality> municipalities;
 
     @Column(name = "station_short_name", nullable = false, unique = true, length = 50)
     private String stationShortName;
@@ -34,12 +33,12 @@ public class Station extends BaseEntity {
     public Station() {
     }
 
-    public Municipality getMunicipality() {
-        return municipality;
+    public List<Municipality> getMunicipalities() {
+        return municipalities;
     }
 
-    public void setMunicipality(Municipality municipality) {
-        this.municipality = municipality;
+    public void setMunicipalities(List<Municipality> municipalities) {
+        this.municipalities = municipalities;
     }
 
     public String getStationShortName() {

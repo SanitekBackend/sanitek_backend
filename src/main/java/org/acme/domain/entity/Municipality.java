@@ -14,7 +14,12 @@ public class Municipality extends BaseEntity {
     @Column(name = "social_vulnerability")
     private Float socialVulnerability;
 
-    @OneToMany(mappedBy = "municipality", fetch = FetchType.LAZY)
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "municipality_station",
+            joinColumns = @JoinColumn(name = "municipality_id"),
+            inverseJoinColumns = @JoinColumn(name = "station_id")
+    )
     private List<Station> stations;
 
     @OneToMany(mappedBy = "municipality", fetch = FetchType.LAZY)

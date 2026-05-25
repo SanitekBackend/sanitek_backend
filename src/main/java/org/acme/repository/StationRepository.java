@@ -10,13 +10,24 @@ import java.util.List;
 public class StationRepository implements PanacheRepository<Station> {
 
     public List<Station> findByMunicipality(Long municipalityId) {
-        return find("municipality.id", municipalityId).list();
+        return getEntityManager()
+                .createQuery("""
+                        SELECT DISTINCT s FROM Station s
+                        JOIN s.municipalities m
+                        WHERE m.id = :municipalityId
+                        """, Station.class)
+                .setParameter("municipalityId", municipalityId)
+                .getResultList();
     }
 
     public List<Long> findIdsByMunicipality(Long municipalityId) {
-        return find("municipality.id", municipalityId)
-                .stream()
-                .map(Station::getId)
-                .toList();
+        return getEntityManager()
+                .createQuery("""
+                        SELECT DISTINCT s.id FROM Station s
+                        JOIN s.municipalities m
+                        WHERE m.id = :municipalityId
+                        """, Long.class)
+                .setParameter("municipalityId", municipalityId)
+                .getResultList();
     }
 }

@@ -26,16 +26,4 @@ public class HealthResource {
     public HealthSummaryResponse getByMunicipality(@PathParam("id") Long id) {
         return service.getSummaryByMunicipality(id);
     }
-
-    @POST
-    @Path("/import/{year}")
-    public Response importFromCsv(@PathParam("year") int year) {
-        if (year < 2000 || year > 2100) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("{\"message\":\"Year must be between 2000 and 2100\"}")
-                    .build();
-        }
-        int count = service.importFromCsv(year);
-        return Response.ok("{\"imported\":" + count + ",\"year\":" + year + "}").build();
-    }
 }
