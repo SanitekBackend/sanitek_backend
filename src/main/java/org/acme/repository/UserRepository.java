@@ -31,10 +31,6 @@ public class UserRepository implements PanacheRepository<User> {
         return find("email", email).firstResultOptional();
     }
 
-    public List<User> findByRole(Long roleId) {
-        return find("role.id", roleId).list();
-    }
-
     public List<User> findByRoleName(String roleName) {
         return find("role.roleName", roleName).list();
     }

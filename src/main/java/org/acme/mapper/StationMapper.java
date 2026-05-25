@@ -12,8 +12,7 @@ public class StationMapper {
         MunicipalitySummary municipality = station.getMunicipality() != null
                 ? new MunicipalitySummary(
                         station.getMunicipality().getId(),
-                        station.getMunicipality().getMunicipalityName(),
-                        station.getMunicipality().getSocialIndex())
+                        station.getMunicipality().getMunicipalityName())
                 : null;
         return new StationResponse(
                 station.getId(),

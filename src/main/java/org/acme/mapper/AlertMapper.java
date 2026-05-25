@@ -12,8 +12,7 @@ public class AlertMapper {
         MunicipalitySummary municipality = alert.getMunicipality() != null
                 ? new MunicipalitySummary(
                         alert.getMunicipality().getId(),
-                        alert.getMunicipality().getMunicipalityName(),
-                        alert.getMunicipality().getSocialIndex())
+                        alert.getMunicipality().getMunicipalityName())
                 : null;
         return new AlertResponse(
                 alert.getId(),

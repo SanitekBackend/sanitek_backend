@@ -15,24 +15,24 @@ INSERT IGNORE INTO pollutant (id, nomenclature, name, pollutant_unit_id, created
 (2, 'O3', 'Ozone', 1, NOW(), NOW()),
 (3, 'PM2.5', 'Particulate Matter 2.5', 1, NOW(), NOW());
 
--- Municipalities (CDMX - CONEVAL 2020 social backlog index)
-INSERT IGNORE INTO municipality (id, municipality_name, social_vulnerability, social_index, created_at, updated_at) VALUES
-(1, 'Alvaro Obregon', -0.37, 'LOW', NOW(), NOW()),
-(2, 'Azcapotzalco', -0.58, 'LOW', NOW(), NOW()),
-(3, 'Benito Juarez', -1.89, 'LOW', NOW(), NOW()),
-(4, 'Coyoacan', -0.55, 'LOW', NOW(), NOW()),
-(5, 'Cuajimalpa', -0.48, 'LOW', NOW(), NOW()),
-(6, 'Cuauhtemoc', -0.62, 'LOW', NOW(), NOW()),
-(7, 'Gustavo A. Madero', 0.31, 'MEDIUM', NOW(), NOW()),
-(8, 'Iztacalco', -0.28, 'LOW', NOW(), NOW()),
-(9, 'Iztapalapa', 0.92, 'HIGH', NOW(), NOW()),
-(10, 'La Magdalena Contreras', 0.19, 'MEDIUM', NOW(), NOW()),
-(11, 'Miguel Hidalgo', -1.31, 'LOW', NOW(), NOW()),
-(12, 'Milpa Alta', 1.24, 'HIGH', NOW(), NOW()),
-(13, 'Tlahuac', 0.62, 'MEDIUM', NOW(), NOW()),
-(14, 'Tlalpan', 0.47, 'MEDIUM', NOW(), NOW()),
-(15, 'Venustiano Carranza', -0.21, 'LOW', NOW(), NOW()),
-(16, 'Xochimilco', 0.69, 'MEDIUM', NOW(), NOW());
+-- Municipalities (CDMX - CONEVAL 2020 social vulnerability values)
+INSERT IGNORE INTO municipality (id, municipality_name, social_vulnerability, created_at, updated_at) VALUES
+(1, 'Alvaro Obregon', -0.37, NOW(), NOW()),
+(2, 'Azcapotzalco', -0.58, NOW(), NOW()),
+(3, 'Benito Juarez', -1.89, NOW(), NOW()),
+(4, 'Coyoacan', -0.55, NOW(), NOW()),
+(5, 'Cuajimalpa', -0.48, NOW(), NOW()),
+(6, 'Cuauhtemoc', -0.62, NOW(), NOW()),
+(7, 'Gustavo A. Madero', 0.31, NOW(), NOW()),
+(8, 'Iztacalco', -0.28, NOW(), NOW()),
+(9, 'Iztapalapa', 0.92, NOW(), NOW()),
+(10, 'La Magdalena Contreras', 0.19, NOW(), NOW()),
+(11, 'Miguel Hidalgo', -1.31, NOW(), NOW()),
+(12, 'Milpa Alta', 1.24, NOW(), NOW()),
+(13, 'Tlahuac', 0.62, NOW(), NOW()),
+(14, 'Tlalpan', 0.47, NOW(), NOW()),
+(15, 'Venustiano Carranza', -0.21, NOW(), NOW()),
+(16, 'Xochimilco', 0.69, NOW(), NOW());
 
 -- Monitoring stations (SINAICA / desired_stations.csv)
 INSERT IGNORE INTO station (id, station_short_name, station_name, municipality_id, created_at, updated_at) VALUES

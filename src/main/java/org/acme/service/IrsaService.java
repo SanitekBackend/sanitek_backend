@@ -152,7 +152,6 @@ public class IrsaService {
                 no2List.size(), o3List.size(), pm25List.size(),
                 avgByPollutant,
                 !temps.isEmpty(),
-                municipality.getSocialIndex(),
                 municipality.getSocialVulnerability()
         );
     }

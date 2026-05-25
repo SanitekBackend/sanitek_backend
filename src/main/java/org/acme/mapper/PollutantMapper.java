@@ -22,8 +22,7 @@ public class PollutantMapper {
         MunicipalitySummary municipality = station.getMunicipality() != null
                 ? new MunicipalitySummary(
                         station.getMunicipality().getId(),
-                        station.getMunicipality().getMunicipalityName(),
-                        station.getMunicipality().getSocialIndex())
+                        station.getMunicipality().getMunicipalityName())
                 : null;
         return new StationResponse(station.getId(), station.getStationShortName(), station.getStationName(), municipality);
     }

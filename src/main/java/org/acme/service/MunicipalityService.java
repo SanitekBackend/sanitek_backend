@@ -28,15 +28,6 @@ public class MunicipalityService {
                 .toList();
     }
 
-    public List<MunicipalityResponse> getBySocialIndex(String socialIndex) {
-        return municipalityRepository.findBySocialIndex(socialIndex).stream()
-                .map(m -> {
-                    Irsa irsa = irsaRepository.findLatestByMunicipality(m.getId()).orElse(null);
-                    return municipalityMapper.toResponse(m, irsa);
-                })
-                .toList();
-    }
-
     public MunicipalityResponse getById(Long id) {
         Municipality m = municipalityRepository.findByIdOptional(id)
                 .orElseThrow(() -> AppException.notFound("Municipality not found"));

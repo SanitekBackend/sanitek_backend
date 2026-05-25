@@ -18,12 +18,11 @@ public class MunicipalityMapper {
                 m.getId(),
                 m.getMunicipalityName(),
                 m.getSocialVulnerability(),
-                m.getSocialIndex(),
                 irsaSummary
         );
     }
 
     public MunicipalitySummary toSummary(Municipality m) {
-        return new MunicipalitySummary(m.getId(), m.getMunicipalityName(), m.getSocialIndex());
+        return new MunicipalitySummary(m.getId(), m.getMunicipalityName());
     }
 }

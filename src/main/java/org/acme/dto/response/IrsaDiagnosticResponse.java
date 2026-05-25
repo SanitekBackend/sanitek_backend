@@ -17,6 +17,5 @@ public record IrsaDiagnosticResponse(
         int pm25Measurements,
         Map<String, Double> averagesByPollutant,
         boolean hasTemperatureData,
-        String socialIndex,
         Float socialVulnerability
 ) {}

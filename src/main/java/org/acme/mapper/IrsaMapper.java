@@ -13,8 +13,7 @@ public class IrsaMapper {
         MunicipalitySummary municipality = irsa.getMunicipality() != null
                 ? new MunicipalitySummary(
                         irsa.getMunicipality().getId(),
-                        irsa.getMunicipality().getMunicipalityName(),
-                        irsa.getMunicipality().getSocialIndex())
+                        irsa.getMunicipality().getMunicipalityName())
                 : null;
         return new IrsaResponse(
                 irsa.getId(),
