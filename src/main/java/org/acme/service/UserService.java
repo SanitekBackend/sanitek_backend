@@ -6,7 +6,6 @@ import jakarta.transaction.Transactional;
 import org.acme.domain.entity.Role;
 import org.acme.domain.entity.User;
 import org.acme.dto.request.CreateUserRequest;
-import org.acme.dto.request.UpdateRoleRequest;
 import org.acme.dto.response.UserResponse;
 import org.acme.exception.AppException;
 import org.acme.mapper.UserMapper;
@@ -54,16 +53,6 @@ public class UserService {
         return userRepository.findByIdOptional(id)
                 .map(userMapper::toResponse)
                 .orElseThrow(() -> AppException.notFound("User not found"));
-    }
-
-    @Transactional
-    public UserResponse updateRole(Long userId, UpdateRoleRequest request) {
-        User user = userRepository.findByIdOptional(userId)
-                .orElseThrow(() -> AppException.notFound("User not found"));
-        Role role = roleRepository.findByIdOptional(request.roleId())
-                .orElseThrow(() -> AppException.notFound("Role not found"));
-        user.setRole(role);
-        return userMapper.toResponse(user);
     }
 
     @Transactional

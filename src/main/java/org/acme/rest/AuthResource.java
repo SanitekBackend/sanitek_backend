@@ -21,6 +21,7 @@ public class AuthResource {
     @POST
     @Path("/login")
     public LoginResponse login(@Valid LoginRequest request) {
+        System.out.println("El login funciono");
         return service.login(request);
     }
 }

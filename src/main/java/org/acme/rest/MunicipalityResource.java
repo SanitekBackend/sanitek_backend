@@ -16,15 +16,6 @@ public class MunicipalityResource {
     @Inject MunicipalityService service;
 
     @GET
-    public List<MunicipalityResponse> listAll(
-            @QueryParam("socialIndex") String socialIndex) {
-        if (socialIndex != null && !socialIndex.isBlank()) {
-            return service.getBySocialIndex(socialIndex);
-        }
-        return service.getAll();
-    }
-
-    @GET
     @Path("/{id}")
     public MunicipalityResponse getById(@PathParam("id") Long id) {
         return service.getById(id);

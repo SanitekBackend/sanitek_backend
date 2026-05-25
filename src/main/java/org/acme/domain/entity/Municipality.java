@@ -14,9 +14,6 @@ public class Municipality extends BaseEntity {
     @Column(name = "social_vulnerability")
     private Float socialVulnerability;
 
-    @Column(name = "social_index", length = 50)
-    private String socialIndex;
-
     @OneToMany(mappedBy = "municipality", fetch = FetchType.LAZY)
     private List<Station> stations;
 
@@ -50,14 +47,6 @@ public class Municipality extends BaseEntity {
 
     public void setSocialVulnerability(Float socialVulnerability) {
         this.socialVulnerability = socialVulnerability;
-    }
-
-    public String getSocialIndex() {
-        return socialIndex;
-    }
-
-    public void setSocialIndex(String socialIndex) {
-        this.socialIndex = socialIndex;
     }
 
     public List<Station> getStations() {

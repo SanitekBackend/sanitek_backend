@@ -6,7 +6,6 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.acme.dto.request.CreateUserRequest;
-import org.acme.dto.request.UpdateRoleRequest;
 import org.acme.dto.response.UserResponse;
 import org.acme.exception.AppException;
 import org.acme.infrastructure.auth.Authenticated;
