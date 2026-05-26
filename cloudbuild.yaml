@@ -13,7 +13,8 @@
 #
 # Requisitos previos en GCP:
 #   - Artifact Registry repository creado en ${_REGION}
-#   - Secrets en Secret Manager: "db-user" y "db-password"
+#   - Secrets en Secret Manager: "db-username", "db-password",
+#     "firebase-service-account" y "ApiKey"
 #   - Service account de Cloud Build con roles:
 #       roles/run.admin
 #       roles/iam.serviceAccountUser
@@ -76,7 +77,7 @@ steps:
           --port 8080 \
           --allow-unauthenticated \
           --set-env-vars "DB_JDBC_URL=${_DB_JDBC_URL},DB_SCHEMA_STRATEGY=update,FIREBASE_SERVICE_ACCOUNT_LOCATION=${_FIREBASE_SERVICE_ACCOUNT_LOCATION},CORS_ORIGINS=${_CORS_ORIGINS}" \
-          --set-secrets "DB_USERNAME=db-username:latest,DB_PASSWORD=db-password:latest,/secrets/firebase.json=firebase-service-account:latest"
+          --set-secrets "DB_USERNAME=db-username:latest,DB_PASSWORD=db-password:latest,FIREBASE_WEB_API_KEY=ApiKey:latest,/secrets/firebase.json=firebase-service-account:latest"
         # Si usas Cloud SQL (recomendado), agrega también:
         # --add-cloudsql-instances ${_PROJECT_ID}:${_REGION}:YOUR_INSTANCE_NAME
 
