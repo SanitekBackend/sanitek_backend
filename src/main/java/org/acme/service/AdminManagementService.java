@@ -162,7 +162,9 @@ public class AdminManagementService {
 
     @Transactional
     public UserResponse updateMe(UpdateProfileRequest request) {
-        User user = currentUserService.getCurrentUser();
+        User authenticatedUser = currentUserService.getCurrentUser();
+        User user = userRepository.findByIdOptional(authenticatedUser.getId())
+                .orElseThrow(() -> AppException.notFound("User not found"));
         String cleanEmail = request.email().trim().toLowerCase();
         userRepository.findByEmail(cleanEmail)
                 .filter(existing -> !existing.getId().equals(user.getId()))
@@ -173,6 +175,7 @@ public class AdminManagementService {
         user.setNames(request.names().trim());
         user.setEmail(cleanEmail);
         firebaseUserService.updateProfile(user.getFirebaseUid(), cleanEmail, user.getNames());
+        userRepository.flush();
         return userMapper.toResponse(user);
     }
 
