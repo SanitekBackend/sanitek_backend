@@ -16,6 +16,11 @@ public class MunicipalityResource {
     @Inject MunicipalityService service;
 
     @GET
+    public List<MunicipalityResponse> getAll() {
+        return service.getAll();
+    }
+
+    @GET
     @Path("/{id}")
     public MunicipalityResponse getById(@PathParam("id") Long id) {
         return service.getById(id);

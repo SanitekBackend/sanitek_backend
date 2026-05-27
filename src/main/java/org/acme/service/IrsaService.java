@@ -79,6 +79,13 @@ public class IrsaService {
                 .toList();
     }
 
+    @Transactional
+    public List<IrsaResponse> calculateAllLatest() {
+        return municipalityRepository.listAllIds().stream()
+                .map(this::calculate)
+                .toList();
+    }
+
     public List<IrsaResponse> getHistorical(Long municipalityId, Instant from, Instant to) {
         return irsaRepository.findHistoricalByMunicipality(municipalityId, from, to).stream()
                 .map(irsaMapper::toResponse)
