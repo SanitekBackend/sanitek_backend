@@ -41,6 +41,7 @@ import java.time.temporal.IsoFields;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -95,29 +96,27 @@ public class IrsaService {
         Municipality municipality = municipalityRepository.findByIdOptional(municipalityId)
                 .orElseThrow(() -> AppException.notFound("Municipality not found"));
 
-        Instant to   = Instant.now();
-        Instant from = to.minus(24, ChronoUnit.HOURS);
-
         List<Long> stationIds = stationRepository.findIdsByMunicipality(municipalityId);
+        CalculationWindow window = resolveLatestMeasurementWindow(stationIds);
 
         double avgNo2  = averagePollutant(
-                no2Repository.findByStationsAndDateRange(stationIds, from, to)
+                no2Repository.findByStationsAndDateRange(stationIds, window.from(), window.to())
                         .stream().map(NO2::getMetricValue).toList());
 
         double avgO3   = averagePollutant(
-                o3Repository.findByStationsAndDateRange(stationIds, from, to)
+                o3Repository.findByStationsAndDateRange(stationIds, window.from(), window.to())
                         .stream().map(O3::getMetricValue).toList());
 
         double avgPm25 = averagePollutant(
-                pm25Repository.findByStationsAndDateRange(stationIds, from, to)
+                pm25Repository.findByStationsAndDateRange(stationIds, window.from(), window.to())
                         .stream().map(PM25::getMetricValue).toList());
 
         double avgUv   = averagePollutant(
-                radiationRepository.findByStationsAndDateRange(stationIds, from, to)
+                radiationRepository.findByStationsAndDateRange(stationIds, window.from(), window.to())
                         .stream().map(Radiation::getMetricValue).toList());
 
         double avgTmp  = averagePollutant(
-                temperatureRepository.findByStationsAndDateRange(stationIds, from, to)
+                temperatureRepository.findByStationsAndDateRange(stationIds, window.from(), window.to())
                         .stream().map(Temperature::getMetricValue).toList());
 
         long copdCount      = copdRepository.countByMunicipality(municipalityId);
@@ -129,8 +128,9 @@ public class IrsaService {
                 avgNo2, avgO3, avgPm25, avgUv, avgTmp,
                 copdCount, asthmaCount, pneumoniaCount, smokingCount);
 
-        LOG.infof("[IRSA] Municipio=%s | NO2=%.4f O3=%.4f PM25=%.4f UV=%.4f TMP=%.4f | C=%.4f | FV=%.4f | IRSA=%.2f | Nivel=%s",
+        LOG.infof("[IRSA] Municipio=%s | Window=%s to %s | NO2=%.4f O3=%.4f PM25=%.4f UV=%.4f TMP=%.4f | C=%.4f | FV=%.4f | IRSA=%.2f | Nivel=%s",
                 municipality.getMunicipalityName(),
+                window.from(), window.to(),
                 result.normNo2(), result.normO3(), result.normPm25(), result.normUv(), result.normTmp(),
                 result.pollutantScore(), result.vulnerabilityFactor(),
                 result.irsaScore(), result.riskLevel());
@@ -145,16 +145,14 @@ public class IrsaService {
         Municipality municipality = municipalityRepository.findByIdOptional(municipalityId)
                 .orElseThrow(() -> AppException.notFound("Municipality not found"));
 
-        Instant to   = Instant.now();
-        Instant from = to.minus(24, ChronoUnit.HOURS);
-
         List<Long> stationIds = stationRepository.findIdsByMunicipality(municipalityId);
+        CalculationWindow window = resolveLatestMeasurementWindow(stationIds);
 
-        List<NO2>         no2List  = no2Repository.findByStationsAndDateRange(stationIds, from, to);
-        List<O3>          o3List   = o3Repository.findByStationsAndDateRange(stationIds, from, to);
-        List<PM25>        pm25List = pm25Repository.findByStationsAndDateRange(stationIds, from, to);
-        List<Radiation>   uvList   = radiationRepository.findByStationsAndDateRange(stationIds, from, to);
-        List<Temperature> tmpList  = temperatureRepository.findByStationsAndDateRange(stationIds, from, to);
+        List<NO2>         no2List  = no2Repository.findByStationsAndDateRange(stationIds, window.from(), window.to());
+        List<O3>          o3List   = o3Repository.findByStationsAndDateRange(stationIds, window.from(), window.to());
+        List<PM25>        pm25List = pm25Repository.findByStationsAndDateRange(stationIds, window.from(), window.to());
+        List<Radiation>   uvList   = radiationRepository.findByStationsAndDateRange(stationIds, window.from(), window.to());
+        List<Temperature> tmpList  = temperatureRepository.findByStationsAndDateRange(stationIds, window.from(), window.to());
 
         double avgNo2  = averagePollutant(no2List.stream().map(NO2::getMetricValue).toList());
         double avgO3   = averagePollutant(o3List.stream().map(O3::getMetricValue).toList());
@@ -375,4 +373,25 @@ public class IrsaService {
         irsa.setVulnerabilityFactor(r.vulnerabilityFactor());
         return irsa;
     }
+
+    private CalculationWindow resolveLatestMeasurementWindow(List<Long> stationIds) {
+        if (stationIds == null || stationIds.isEmpty()) {
+            throw AppException.notFound("No stations found for this municipality");
+        }
+
+        Instant latest = List.of(
+                        no2Repository.findLatestRegisteredAtByStations(stationIds),
+                        o3Repository.findLatestRegisteredAtByStations(stationIds),
+                        pm25Repository.findLatestRegisteredAtByStations(stationIds),
+                        radiationRepository.findLatestRegisteredAtByStations(stationIds),
+                        temperatureRepository.findLatestRegisteredAtByStations(stationIds)
+                ).stream()
+                .flatMap(Optional::stream)
+                .max(Comparator.naturalOrder())
+                .orElseThrow(() -> AppException.notFound("No measurement data found for this municipality"));
+
+        return new CalculationWindow(latest.minus(24, ChronoUnit.HOURS), latest);
+    }
+
+    private record CalculationWindow(Instant from, Instant to) {}
 }

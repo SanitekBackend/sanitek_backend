@@ -9,6 +9,7 @@ import org.acme.domain.entity.User;
 import org.acme.dto.request.CreateAlertRequest;
 import org.acme.dto.response.AlertResponse;
 import org.acme.exception.AppException;
+import org.acme.infrastructure.messaging.rabbitmq.AlertEventProducer;
 import org.acme.mapper.AlertMapper;
 import org.acme.repository.AlertRepository;
 import org.acme.repository.MunicipalityRepository;
@@ -23,6 +24,7 @@ public class AlertService {
     @Inject UserRepository userRepository;
     @Inject MunicipalityRepository municipalityRepository;
     @Inject AlertMapper alertMapper;
+    @Inject AlertEventProducer alertEventProducer;
 
     @Transactional
     public AlertResponse create(Long userId, CreateAlertRequest request) {
@@ -38,6 +40,8 @@ public class AlertService {
         alert.setMessage(request.message());
         alert.setIsActive(true);
         alertRepository.persist(alert);
+        alertRepository.flush();
+        alertEventProducer.publishAlertCreated(alert);
         return alertMapper.toResponse(alert);
     }
 
@@ -51,6 +55,7 @@ public class AlertService {
         Alert existing = alertRepository.findByUserAndMunicipality(userId, municipalityId).orElse(null);
         if (existing != null) {
             existing.setIsActive(true);
+            alertEventProducer.publishAlertCreated(existing);
             return alertMapper.toResponse(existing);
         }
 
@@ -61,6 +66,8 @@ public class AlertService {
         alert.setMessage("Subscribed to alerts for " + municipality.getMunicipalityName());
         alert.setIsActive(true);
         alertRepository.persist(alert);
+        alertRepository.flush();
+        alertEventProducer.publishAlertCreated(alert);
         return alertMapper.toResponse(alert);
     }
 

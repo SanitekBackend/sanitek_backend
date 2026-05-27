@@ -7,6 +7,7 @@ import org.acme.domain.entity.O3;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 @ApplicationScoped
 public class O3Repository implements PanacheRepository<O3> {
@@ -19,5 +20,18 @@ public class O3Repository implements PanacheRepository<O3> {
         if (stationIds == null || stationIds.isEmpty()) return List.of();
         return find("station.id IN ?1 AND registeredAt >= ?2 AND registeredAt <= ?3",
                 stationIds, from, to).list();
+    }
+
+    public Optional<Instant> findLatestRegisteredAtByStations(List<Long> stationIds) {
+        if (stationIds == null || stationIds.isEmpty()) return Optional.empty();
+        Instant latest = getEntityManager()
+                .createQuery("""
+                        SELECT MAX(o.registeredAt)
+                        FROM O3 o
+                        WHERE o.station.id IN :stationIds
+                        """, Instant.class)
+                .setParameter("stationIds", stationIds)
+                .getSingleResult();
+        return Optional.ofNullable(latest);
     }
 }

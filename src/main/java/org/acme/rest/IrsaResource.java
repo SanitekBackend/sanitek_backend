@@ -7,16 +7,21 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.acme.domain.irsa.IrsaEngine;
 import org.acme.domain.irsa.IrsaResult;
+import org.acme.dto.request.IrsaBatchCalculationRequest;
 import org.acme.dto.request.IrsaSimulateRequest;
 import org.acme.dto.response.IrsaDiagnosticResponse;
 import org.acme.dto.response.IrsaResponse;
 import org.acme.dto.response.IrsaTrendResponse;
+import org.acme.infrastructure.messaging.kafka.IrsaBatchProcessingStats;
+import org.acme.infrastructure.messaging.kafka.IrsaCalculationProducer;
 import org.acme.service.IrsaService;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 @Path("/api/irsa")
 @Produces(MediaType.APPLICATION_JSON)
@@ -25,6 +30,12 @@ public class IrsaResource {
 
     @Inject
     IrsaService service;
+
+    @Inject
+    IrsaCalculationProducer irsaCalculationProducer;
+
+    @Inject
+    IrsaBatchProcessingStats irsaBatchProcessingStats;
 
     private final IrsaEngine engine = new IrsaEngine();
 
@@ -73,6 +84,51 @@ public class IrsaResource {
         return Response.status(Response.Status.CREATED)
                 .entity(result)
                 .build();
+    }
+
+    @POST
+    @Path("/calculate/{municipalityId}/async")
+    public Response calculateAsync(@PathParam("municipalityId") Long municipalityId) {
+        String batchId = irsaCalculationProducer.publishSingle(municipalityId);
+        return Response.accepted(Map.of("batchId", batchId, "enqueued", 1)).build();
+    }
+
+    @POST
+    @Path("/batch/calculate")
+    public Response calculateBatch(@Valid IrsaBatchCalculationRequest request) {
+        String batchId = irsaCalculationProducer.publishBatch(request.municipalityIds());
+        return Response.accepted(Map.of("batchId", batchId, "enqueued", request.municipalityIds().size())).build();
+    }
+
+    @POST
+    @Path("/batch/calculate/{municipalityIds}")
+    public Response calculateBatchFromPath(@PathParam("municipalityIds") String municipalityIds) {
+        List<Long> ids = Arrays.stream(municipalityIds.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(Long::valueOf)
+                .toList();
+
+        String batchId = irsaCalculationProducer.publishBatch(ids);
+        return Response.accepted(Map.of("batchId", batchId, "enqueued", ids.size())).build();
+    }
+
+    @GET
+    @Path("/batch/status/{batchId}")
+    public Response batchStatus(@PathParam("batchId") String batchId) {
+        IrsaBatchProcessingStats.Snapshot snapshot = irsaBatchProcessingStats.snapshot(batchId);
+        if (snapshot == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity(Map.of("message", "Batch not found", "batchId", batchId))
+                    .build();
+        }
+        return Response.ok(snapshot).build();
+    }
+
+    @GET
+    @Path("/batch/status")
+    public Map<String, IrsaBatchProcessingStats.Snapshot> allBatchStatuses() {
+        return irsaBatchProcessingStats.allSnapshots();
     }
 
     @GET

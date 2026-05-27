@@ -28,4 +28,17 @@ public class TemperatureRepository implements PanacheRepository<Temperature> {
         return find("station.id IN ?1 AND registeredAt >= ?2 AND registeredAt <= ?3",
                 stationIds, from, to).list();
     }
+
+    public Optional<Instant> findLatestRegisteredAtByStations(List<Long> stationIds) {
+        if (stationIds == null || stationIds.isEmpty()) return Optional.empty();
+        Instant latest = getEntityManager()
+                .createQuery("""
+                        SELECT MAX(t.registeredAt)
+                        FROM Temperature t
+                        WHERE t.station.id IN :stationIds
+                        """, Instant.class)
+                .setParameter("stationIds", stationIds)
+                .getSingleResult();
+        return Optional.ofNullable(latest);
+    }
 }

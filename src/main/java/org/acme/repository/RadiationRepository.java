@@ -36,4 +36,17 @@ public class RadiationRepository implements PanacheRepository<Radiation> {
                 Sort.by("registeredAt").descending(),
                 stationIds, from, to).list();
     }
+
+    public Optional<Instant> findLatestRegisteredAtByStations(List<Long> stationIds) {
+        if (stationIds == null || stationIds.isEmpty()) return Optional.empty();
+        Instant latest = getEntityManager()
+                .createQuery("""
+                        SELECT MAX(r.registeredAt)
+                        FROM Radiation r
+                        WHERE r.station.id IN :stationIds
+                        """, Instant.class)
+                .setParameter("stationIds", stationIds)
+                .getSingleResult();
+        return Optional.ofNullable(latest);
+    }
 }
