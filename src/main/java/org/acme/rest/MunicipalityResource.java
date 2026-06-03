@@ -16,7 +16,7 @@ public class MunicipalityResource {
     @Inject MunicipalityService service;
 
     @GET
-    public List<MunicipalityResponse> getAll() {
+    public List<MunicipalityResponse> listAll() {
         return service.getAll();
     }
 

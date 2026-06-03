@@ -19,9 +19,8 @@ public record IrsaResult(
         Instant calculatedAt
 ) {
     public static String categorize(double score) {
-        if (score <= 25.0) return "LOW";
-        if (score <= 50.0) return "MODERATE";
-        if (score <= 75.0) return "HIGH";
-        return "CRITICAL";
+        if (score <= 40.0) return "LOW";       // 0-40  → IRSA bajo   (verde)
+        if (score <= 70.0) return "MODERATE";  // 41-70 → IRSA regular (amarillo)
+        return "HIGH";                          // 71-100→ IRSA alto   (rojo)
     }
 }

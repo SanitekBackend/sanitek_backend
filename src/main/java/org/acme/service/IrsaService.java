@@ -79,13 +79,6 @@ public class IrsaService {
                 .toList();
     }
 
-    @Transactional
-    public List<IrsaResponse> calculateAllLatest() {
-        return municipalityRepository.listAllIds().stream()
-                .map(this::calculate)
-                .toList();
-    }
-
     public List<IrsaResponse> getHistorical(Long municipalityId, Instant from, Instant to) {
         return irsaRepository.findHistoricalByMunicipality(municipalityId, from, to).stream()
                 .map(irsaMapper::toResponse)
@@ -106,25 +99,40 @@ public class IrsaService {
         List<Long> stationIds = stationRepository.findIdsByMunicipality(municipalityId);
         CalculationWindow window = resolveLatestMeasurementWindow(stationIds);
 
-        double avgNo2  = averagePollutant(
+        double avgNo2  = averagePollutantOrLastValid(
                 no2Repository.findByStationsAndDateRange(stationIds, window.from(), window.to())
-                        .stream().map(NO2::getMetricValue).toList());
+                        .stream().map(NO2::getMetricValue).toList(),
+                () -> no2Repository.findRecentValuesByStations(stationIds, 100),
+                () -> no2Repository.findCityWideRecentValues(500),
+                "NO2");
 
-        double avgO3   = averagePollutant(
+        double avgO3   = averagePollutantOrLastValid(
                 o3Repository.findByStationsAndDateRange(stationIds, window.from(), window.to())
-                        .stream().map(O3::getMetricValue).toList());
+                        .stream().map(O3::getMetricValue).toList(),
+                () -> o3Repository.findRecentValuesByStations(stationIds, 100),
+                () -> o3Repository.findCityWideRecentValues(500),
+                "O3");
 
-        double avgPm25 = averagePollutant(
+        double avgPm25 = averagePollutantOrLastValid(
                 pm25Repository.findByStationsAndDateRange(stationIds, window.from(), window.to())
-                        .stream().map(PM25::getMetricValue).toList());
+                        .stream().map(PM25::getMetricValue).toList(),
+                () -> pm25Repository.findRecentValuesByStations(stationIds, 100),
+                () -> pm25Repository.findCityWideRecentValues(500),
+                "PM25");
 
-        double avgUv   = averagePollutant(
+        double avgUv   = averagePollutantOrLastValid(
                 radiationRepository.findByStationsAndDateRange(stationIds, window.from(), window.to())
-                        .stream().map(Radiation::getMetricValue).toList());
+                        .stream().map(Radiation::getMetricValue).toList(),
+                () -> radiationRepository.findRecentValuesByStations(stationIds, 100),
+                () -> radiationRepository.findCityWideRecentValues(500),
+                "UV");
 
-        double avgTmp  = averagePollutant(
+        double avgTmp  = averagePollutantOrLastValid(
                 temperatureRepository.findByStationsAndDateRange(stationIds, window.from(), window.to())
-                        .stream().map(Temperature::getMetricValue).toList());
+                        .stream().map(Temperature::getMetricValue).toList(),
+                () -> temperatureRepository.findRecentValuesByStations(stationIds, 100),
+                () -> temperatureRepository.findCityWideRecentValues(500),
+                "TMP");
 
         long copdCount      = copdRepository.countByMunicipality(municipalityId);
         long asthmaCount    = asthmaRepository.countTotalByMunicipality(municipalityId);
@@ -152,6 +160,9 @@ public class IrsaService {
         Municipality municipality = municipalityRepository.findByIdOptional(municipalityId)
                 .orElseThrow(() -> AppException.notFound("Municipality not found"));
 
+        LOG.infof("[DIAGNOSTIC] Calculando para municipalityId=%d (%s)",
+                municipalityId, municipality.getMunicipalityName());
+
         List<Long> stationIds = stationRepository.findIdsByMunicipality(municipalityId);
         CalculationWindow window = resolveLatestMeasurementWindow(stationIds);
 
@@ -161,11 +172,35 @@ public class IrsaService {
         List<Radiation>   uvList   = radiationRepository.findByStationsAndDateRange(stationIds, window.from(), window.to());
         List<Temperature> tmpList  = temperatureRepository.findByStationsAndDateRange(stationIds, window.from(), window.to());
 
-        double avgNo2  = averagePollutant(no2List.stream().map(NO2::getMetricValue).toList());
-        double avgO3   = averagePollutant(o3List.stream().map(O3::getMetricValue).toList());
-        double avgPm25 = averagePollutant(pm25List.stream().map(PM25::getMetricValue).toList());
-        double avgUv   = averagePollutant(uvList.stream().map(Radiation::getMetricValue).toList());
-        double avgTmp  = averagePollutant(tmpList.stream().map(Temperature::getMetricValue).toList());
+        double avgNo2  = averagePollutantOrLastValid(
+                no2List.stream().map(NO2::getMetricValue).toList(),
+                () -> no2Repository.findRecentValuesByStations(stationIds, 100),
+                () -> no2Repository.findCityWideRecentValues(500),
+                "NO2");
+
+        double avgO3   = averagePollutantOrLastValid(
+                o3List.stream().map(O3::getMetricValue).toList(),
+                () -> o3Repository.findRecentValuesByStations(stationIds, 100),
+                () -> o3Repository.findCityWideRecentValues(500),
+                "O3");
+
+        double avgPm25 = averagePollutantOrLastValid(
+                pm25List.stream().map(PM25::getMetricValue).toList(),
+                () -> pm25Repository.findRecentValuesByStations(stationIds, 100),
+                () -> pm25Repository.findCityWideRecentValues(500),
+                "PM25");
+
+        double avgUv   = averagePollutantOrLastValid(
+                uvList.stream().map(Radiation::getMetricValue).toList(),
+                () -> radiationRepository.findRecentValuesByStations(stationIds, 100),
+                () -> radiationRepository.findCityWideRecentValues(500),
+                "UV");
+
+        double avgTmp  = averagePollutantOrLastValid(
+                tmpList.stream().map(Temperature::getMetricValue).toList(),
+                () -> temperatureRepository.findRecentValuesByStations(stationIds, 100),
+                () -> temperatureRepository.findCityWideRecentValues(500),
+                "TMP");
 
         long copdCount      = copdRepository.countByMunicipality(municipalityId);
         long asthmaCount    = asthmaRepository.countTotalByMunicipality(municipalityId);
@@ -175,6 +210,13 @@ public class IrsaService {
         IrsaResult r = engine.calculate(
                 avgNo2, avgO3, avgPm25, avgUv, avgTmp,
                 copdCount, asthmaCount, pneumoniaCount, smokingCount);
+
+        LOG.infof("[DIAGNOSTIC] Municipio=%s | Window=%s to %s | NO2=%.4f O3=%.4f PM25=%.4f UV=%.4f TMP=%.4f | Score=%.4f | FV=%.4f | IRSA=%.2f | Nivel=%s",
+                municipality.getMunicipalityName(),
+                window.from(), window.to(),
+                r.normNo2(), r.normO3(), r.normPm25(), r.normUv(), r.normTmp(),
+                r.pollutantScore(), r.vulnerabilityFactor(),
+                r.irsaScore(), r.riskLevel());
 
         return new IrsaDiagnosticResponse(
                 municipalityId,
@@ -347,10 +389,59 @@ public class IrsaService {
         if (values == null || values.isEmpty()) return 0.0;
         OptionalDouble avg = values.stream()
                 .mapToDouble(this::parseDouble)
-                .filter(v -> !Double.isNaN(v) && v >= 0.0)
+                .filter(v -> !Double.isNaN(v) && v > 0.0)   // excluye 0 además de NaN
                 .average();
         return avg.isPresent() ? avg.getAsDouble() : 0.0;
     }
+
+    /**
+     * Cadena de fallback de 3 niveles para obtener un valor de contaminante:
+     * <ol>
+     *   <li>Promedio del window de 24 h de las estaciones de la alcaldia.</li>
+     *   <li>Si todo es 0/"$": primer valor valido de los ultimos 100 registros historicos
+     *       de esas mismas estaciones.</li>
+     *   <li>Si sigue sin datos: promedio de los ultimos 500 registros de TODA la ciudad,
+     *       reflejando condiciones actuales de CDMX.</li>
+     * </ol>
+     *
+     * @param pollutantName  nombre del contaminante, solo para el log de diagnostico.
+     * @param cityWideFn     supplier que retorna valores recientes de toda la ciudad.
+     */
+    private double averagePollutantOrLastValid(List<String> windowValues,
+                                               java.util.function.Supplier<List<String>> recentValuesFn,
+                                               java.util.function.Supplier<List<String>> cityWideFn,
+                                               String pollutantName) {
+        // Nivel 1 - window de la alcaldia
+        double avg = averagePollutant(windowValues);
+        if (avg > 0.0) return avg;
+
+        // Nivel 2 - historial reciente de las estaciones de la alcaldia
+        List<String> recent = recentValuesFn.get();
+        OptionalDouble lastValid = recent.stream()
+                .mapToDouble(this::parseDouble)
+                .filter(v -> !Double.isNaN(v) && v > 0.0)
+                .findFirst();
+
+        if (lastValid.isPresent()) {
+            LOG.debugf("[FALLBACK-LOCAL] %s: window=%d med. invalidas -> ultimo valor historico: %.4f",
+                    pollutantName, windowValues.size(), lastValid.getAsDouble());
+            return lastValid.getAsDouble();
+        }
+
+        // Nivel 3 - promedio ciudad (todas las alcaldias)
+        List<String> cityValues = cityWideFn.get();
+        double cityAvg = averagePollutant(cityValues);
+        if (cityAvg > 0.0) {
+            LOG.infof("[FALLBACK-CIUDAD] %s: alcaldia sin datos historicos -> promedio ciudad: %.4f",
+                    pollutantName, cityAvg);
+            return cityAvg;
+        }
+
+        LOG.warnf("[FALLBACK] %s: sin datos en window (%d), historial (%d) ni ciudad (%d) -> 0.0",
+                pollutantName, windowValues.size(), recent.size(), cityValues.size());
+        return 0.0;
+    }
+
 
     private double parseDouble(String value) {
         if (value == null || value.isBlank()) return Double.NaN;

@@ -49,6 +49,13 @@
             <artifactId>rest-assured</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Mockito con extensión JUnit 5 para unit tests de mensajería
+             NOTA: En Quarkus >= 3.31 el artifactId correcto es quarkus-junit-mockito -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit-mockito</artifactId>
+            <scope>test</scope>
+        </dependency>
 
         <!-- JSON para REST -->
         <dependency>

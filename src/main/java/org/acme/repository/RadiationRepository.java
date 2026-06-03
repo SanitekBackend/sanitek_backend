@@ -49,4 +49,32 @@ public class RadiationRepository implements PanacheRepository<Radiation> {
                 .getSingleResult();
         return Optional.ofNullable(latest);
     }
+
+    /** Devuelve los últimos {@code limit} metricValue registrados (desc por fecha),
+     *  sin filtrar por ventana de tiempo — usado como fallback cuando el window actual
+     *  solo contiene ceros o valores inválidos. */
+    public List<String> findRecentValuesByStations(List<Long> stationIds, int limit) {
+        if (stationIds == null || stationIds.isEmpty()) return List.of();
+        return getEntityManager()
+                .createQuery("""
+                        SELECT r.metricValue FROM Radiation r
+                        WHERE r.station.id IN :stationIds
+                        ORDER BY r.registeredAt DESC
+                        """, String.class)
+                .setParameter("stationIds", stationIds)
+                .setMaxResults(limit)
+                .getResultList();
+    }
+
+    /** Devuelve los últimos {@code limit} metricValue de TODAS las estaciones (ciudad entera).
+     *  Usado como fallback final cuando la alcaldía no tiene ningún dato histórico válido. */
+    public List<String> findCityWideRecentValues(int limit) {
+        return getEntityManager()
+                .createQuery("""
+                        SELECT r.metricValue FROM Radiation r
+                        ORDER BY r.registeredAt DESC
+                        """, String.class)
+                .setMaxResults(limit)
+                .getResultList();
+    }
 }

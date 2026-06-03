@@ -14,7 +14,6 @@ import org.acme.dto.response.IrsaResponse;
 import org.acme.dto.response.IrsaTrendResponse;
 import org.acme.infrastructure.messaging.kafka.IrsaBatchProcessingStats;
 import org.acme.infrastructure.messaging.kafka.IrsaCalculationProducer;
-import org.acme.repository.MunicipalityRepository;
 import org.acme.service.IrsaService;
 
 import java.time.Instant;
@@ -37,9 +36,6 @@ public class IrsaResource {
 
     @Inject
     IrsaBatchProcessingStats irsaBatchProcessingStats;
-
-    @Inject
-    MunicipalityRepository municipalityRepository;
 
     private final IrsaEngine engine = new IrsaEngine();
 
@@ -91,12 +87,6 @@ public class IrsaResource {
     }
 
     @POST
-    @Path("/calculate/all")
-    public List<IrsaResponse> calculateAllLatest() {
-        return service.calculateAllLatest();
-    }
-
-    @POST
     @Path("/calculate/{municipalityId}/async")
     public Response calculateAsync(@PathParam("municipalityId") Long municipalityId) {
         String batchId = irsaCalculationProducer.publishSingle(municipalityId);
@@ -119,14 +109,6 @@ public class IrsaResource {
                 .map(Long::valueOf)
                 .toList();
 
-        String batchId = irsaCalculationProducer.publishBatch(ids);
-        return Response.accepted(Map.of("batchId", batchId, "enqueued", ids.size())).build();
-    }
-
-    @POST
-    @Path("/batch/calculate/all")
-    public Response calculateAllMunicipalities() {
-        List<Long> ids = municipalityRepository.listAllIds();
         String batchId = irsaCalculationProducer.publishBatch(ids);
         return Response.accepted(Map.of("batchId", batchId, "enqueued", ids.size())).build();
     }
