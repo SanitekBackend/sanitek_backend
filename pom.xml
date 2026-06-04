@@ -109,6 +109,12 @@
             <artifactId>quarkus-messaging-rabbitmq</artifactId>
         </dependency>
 
+        <!-- Mailer para envío de correos -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-mailer</artifactId>
+        </dependency>
+
         <!-- Firebase Admin SDK -->
         <dependency>
             <groupId>com.google.firebase</groupId>
