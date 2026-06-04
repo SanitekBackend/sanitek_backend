@@ -4,13 +4,16 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.acme.dto.response.IrsaBackfillResponse;
 import org.acme.dto.response.IrsaDiagnosticResponse;
 import org.acme.dto.response.IrsaResponse;
 import org.acme.dto.response.IrsaTimelineSnapshotResponse;
 import org.acme.dto.response.IrsaTrendResponse;
+import org.acme.infrastructure.messaging.rabbitmq.AlertEventProducer;
 import org.acme.infrastructure.messaging.kafka.IrsaBatchProcessingStats;
 import org.acme.infrastructure.messaging.kafka.IrsaCalculationProducer;
 import org.acme.service.IrsaService;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -31,6 +34,12 @@ public class IrsaResource {
 
     @Inject
     IrsaBatchProcessingStats irsaBatchProcessingStats;
+
+    @Inject
+    AlertEventProducer alertEventProducer;
+
+    @ConfigProperty(name = "messaging.enabled", defaultValue = "true")
+    boolean messagingEnabled;
 
     @GET
     public List<IrsaResponse> listLatest() {
@@ -73,6 +82,9 @@ public class IrsaResource {
     public Response calculate(@PathParam("municipalityId") Long municipalityId) {
 
         IrsaResponse result = service.calculate(municipalityId);
+        if (isHighRisk(result.riskLevel())) {
+            alertEventProducer.publishRiskDetected(result);
+        }
 
         return Response.status(Response.Status.CREATED)
                 .entity(result)
@@ -82,6 +94,9 @@ public class IrsaResource {
     @POST
     @Path("/calculate/{municipalityId}/async")
     public Response calculateAsync(@PathParam("municipalityId") Long municipalityId) {
+        if (!messagingEnabled) {
+            return messagingUnavailable();
+        }
         String batchId = irsaCalculationProducer.publishSingle(municipalityId);
         return Response.accepted(Map.of("batchId", batchId, "enqueued", 1)).build();
     }
@@ -89,6 +104,9 @@ public class IrsaResource {
     @POST
     @Path("/batch/calculate/all")
     public Response calculateAllAsync() {
+        if (!messagingEnabled) {
+            return messagingUnavailable();
+        }
         List<Long> municipalityIds = service.listAllMunicipalityIds();
         String batchId = irsaCalculationProducer.publishBatch(municipalityIds);
         return Response.accepted(Map.of("batchId", batchId, "enqueued", municipalityIds.size())).build();
@@ -110,6 +128,16 @@ public class IrsaResource {
     @Path("/batch/status")
     public Map<String, IrsaBatchProcessingStats.Snapshot> allBatchStatuses() {
         return irsaBatchProcessingStats.allSnapshots();
+    }
+
+    private Response messagingUnavailable() {
+        return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                .entity(Map.of("message", "Messaging is disabled in this environment"))
+                .build();
+    }
+
+    private boolean isHighRisk(String riskLevel) {
+        return "HIGH".equalsIgnoreCase(riskLevel) || "CRITICAL".equalsIgnoreCase(riskLevel);
     }
 
     @GET
@@ -143,6 +171,31 @@ public class IrsaResource {
     ) {
 
         return service.getTrend(municipalityId, period, count);
+    }
+
+    @POST
+    @Path("/backfill/monthly")
+    @Consumes(MediaType.WILDCARD)
+    public Response backfillMonthly(
+            @QueryParam("from") String fromStr,
+            @QueryParam("to") String toStr
+    ) {
+        if (fromStr == null || fromStr.isBlank() || toStr == null || toStr.isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("message", "Query params 'from' and 'to' are required in YYYY-MM-DD format"))
+                    .build();
+        }
+
+        try {
+            LocalDate from = LocalDate.parse(fromStr);
+            LocalDate to = LocalDate.parse(toStr);
+            IrsaBackfillResponse result = service.backfillMonthly(from, to);
+            return Response.ok(result).build();
+        } catch (DateTimeParseException e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("message", "Invalid date format. Use YYYY-MM-DD"))
+                    .build();
+        }
     }
 
     @GET

@@ -3,6 +3,7 @@ package org.acme.service;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import org.acme.domain.entity.Irsa;
 import org.acme.domain.entity.Municipality;
 import org.acme.domain.entity.NO2;
@@ -12,6 +13,7 @@ import org.acme.domain.entity.Radiation;
 import org.acme.domain.entity.Temperature;
 import org.acme.domain.irsa.IrsaEngine;
 import org.acme.domain.irsa.IrsaResult;
+import org.acme.dto.response.IrsaBackfillResponse;
 import org.acme.dto.response.IrsaDiagnosticResponse;
 import org.acme.dto.response.IrsaResponse;
 import org.acme.dto.response.IrsaTimelineMunicipalityPoint;
@@ -38,8 +40,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -160,6 +164,8 @@ public class IrsaService {
                 result.irsaScore(), result.riskLevel());
 
         Irsa irsa = buildIrsa(municipality, result);
+        irsa.setPeriodStart(window.from());
+        irsa.setPeriodEnd(window.to());
         irsaRepository.persist(irsa);
 
         return irsaMapper.toResponse(irsa);
@@ -373,15 +379,159 @@ public class IrsaService {
         }
     }
 
+    public IrsaBackfillResponse backfillMonthly(LocalDate fromDate, LocalDate toDate) {
+        if (fromDate == null || toDate == null) {
+            throw AppException.badRequest("from and to are required in YYYY-MM-DD format");
+        }
+        if (!fromDate.isBefore(toDate)) {
+            throw AppException.badRequest("from must be before to");
+        }
+
+        ZoneId cdmx = ZoneId.of("America/Mexico_City");
+        YearMonth fromMonth = YearMonth.from(fromDate);
+        YearMonth toMonthExclusive = YearMonth.from(toDate);
+        if (toDate.getDayOfMonth() > 1) {
+            toMonthExclusive = toMonthExclusive.plusMonths(1);
+        }
+
+        Instant rangeStart = fromMonth.atDay(1).atStartOfDay(cdmx).toInstant();
+        Instant rangeEnd = toMonthExclusive.atDay(1).atStartOfDay(cdmx).toInstant();
+
+        List<Municipality> municipalities = municipalityRepository.listAll().stream()
+                .sorted(Comparator.comparing(Municipality::getId))
+                .toList();
+        List<Long> cityStationIds = stationRepository.listAll().stream()
+                .map(station -> station.getId())
+                .toList();
+        Map<TimelineCityCacheKey, Double> cityAverageCache = new HashMap<>();
+        List<String> errors = new ArrayList<>();
+
+        int months = 0;
+        int created = 0;
+        int updated = 0;
+        int skipped = 0;
+        int failed = 0;
+
+        LOG.infof("[IRSA-BACKFILL] Monthly backfill starting from=%s to=%s months=%d municipalities=%d",
+                rangeStart, rangeEnd, java.time.temporal.ChronoUnit.MONTHS.between(fromMonth, toMonthExclusive),
+                municipalities.size());
+
+        for (YearMonth month = fromMonth; month.isBefore(toMonthExclusive); month = month.plusMonths(1)) {
+            months++;
+            Instant periodStart = month.atDay(1).atStartOfDay(cdmx).toInstant();
+            Instant periodEnd = month.plusMonths(1).atDay(1).atStartOfDay(cdmx).toInstant();
+
+            LOG.infof("[IRSA-BACKFILL] Calculating month=%s periodStart=%s periodEnd=%s",
+                    month, periodStart, periodEnd);
+
+            for (Municipality municipality : municipalities) {
+                try {
+                    List<Long> stationIds = stationRepository.findIdsByMunicipality(municipality.getId());
+                    if (stationIds == null || stationIds.isEmpty()) {
+                        throw AppException.notFound("No stations found for this municipality");
+                    }
+
+                    Optional<IrsaResult> result = calculateMonthlyResultForWindow(
+                            municipality.getId(),
+                            stationIds,
+                            cityStationIds,
+                            periodStart,
+                            periodEnd,
+                            cityAverageCache
+                    );
+                    if (result.isEmpty()) {
+                        if (deleteMonthlyIrsa(municipality.getId(), periodStart, periodEnd)) {
+                            LOG.infof("[IRSA-BACKFILL] Deleted stale no-data record month=%s municipality=%s",
+                                    month, municipality.getMunicipalityName());
+                        }
+                        skipped++;
+                        continue;
+                    }
+
+                    boolean createdRecord = upsertMonthlyIrsa(
+                            municipality.getId(),
+                            periodStart,
+                            periodEnd,
+                            result.get()
+                    );
+                    if (createdRecord) {
+                        created++;
+                    } else {
+                        updated++;
+                    }
+                } catch (Exception e) {
+                    failed++;
+                    String error = "%s %s: %s".formatted(
+                            month,
+                            municipality.getMunicipalityName(),
+                            e.getMessage()
+                    );
+                    errors.add(error);
+                    LOG.warnf("[IRSA-BACKFILL] %s", error);
+                }
+            }
+        }
+
+        LOG.infof("[IRSA-BACKFILL] Monthly backfill done from=%s to=%s months=%d municipalities=%d created=%d updated=%d skipped=%d failed=%d",
+                rangeStart, rangeEnd, months, municipalities.size(), created, updated, skipped, failed);
+
+        return new IrsaBackfillResponse(
+                rangeStart,
+                rangeEnd,
+                months,
+                municipalities.size(),
+                created,
+                updated,
+                skipped,
+                failed,
+                errors
+        );
+    }
+
+    private boolean upsertMonthlyIrsa(Long municipalityId,
+                                      Instant periodStart,
+                                      Instant periodEnd,
+                                      IrsaResult result) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            Irsa irsa = irsaRepository
+                    .findByMunicipalityAndPeriod(municipalityId, periodStart, periodEnd)
+                    .orElse(null);
+
+            if (irsa == null) {
+                Municipality municipality = municipalityRepository.findByIdOptional(municipalityId)
+                        .orElseThrow(() -> AppException.notFound("Municipality not found"));
+                irsa = buildIrsa(municipality, result);
+                irsa.setPeriodStart(periodStart);
+                irsa.setPeriodEnd(periodEnd);
+                irsaRepository.persist(irsa);
+                return true;
+            }
+
+            applyIrsaResult(irsa, result);
+            irsa.setPeriodStart(periodStart);
+            irsa.setPeriodEnd(periodEnd);
+            return false;
+        });
+    }
+
+    private boolean deleteMonthlyIrsa(Long municipalityId, Instant periodStart, Instant periodEnd) {
+        return QuarkusTransaction.requiringNew().call(() ->
+                irsaRepository.delete("municipality.id = ?1 AND periodStart = ?2 AND periodEnd = ?3 AND isForecast = false",
+                        municipalityId, periodStart, periodEnd) > 0
+        );
+    }
+
     public IrsaTrendResponse getTrend(Long municipalityId, String period, int count) {
         Municipality municipality = municipalityRepository.findByIdOptional(municipalityId)
                 .orElseThrow(() -> AppException.notFound("Municipality not found"));
 
         boolean monthly = "MONTHLY".equalsIgnoreCase(period);
+        if (monthly) {
+            return getMonthlyTrend(municipality, count);
+        }
+
         Instant to   = Instant.now();
-        Instant from = monthly
-                ? to.minus(count * 30L, ChronoUnit.DAYS)
-                : to.minus(count * 7L,  ChronoUnit.DAYS);
+        Instant from = to.minus(count * 7L, ChronoUnit.DAYS);
 
         List<Irsa> records = irsaRepository.findHistoricalByMunicipality(municipalityId, from, to);
 
@@ -439,6 +589,72 @@ public class IrsaService {
 
         return new IrsaTrendResponse(municipalityId, municipality.getMunicipalityName(),
                 period.toUpperCase(), count, trend, variation, points);
+    }
+
+    private IrsaTrendResponse getMonthlyTrend(Municipality municipality, int count) {
+        int safeCount = Math.max(count, 1);
+        ZoneId cdmx = ZoneId.of("America/Mexico_City");
+        YearMonth currentMonth = YearMonth.now(cdmx);
+        YearMonth fromMonth = currentMonth.minusMonths(safeCount - 1L);
+        Instant from = fromMonth.atDay(1).atStartOfDay(cdmx).toInstant();
+        Instant to = currentMonth.plusMonths(1).atDay(1).atStartOfDay(cdmx).toInstant();
+
+        List<Irsa> records = irsaRepository.findHistoricalByMunicipalityPeriod(municipality.getId(), from, to);
+        if (records.isEmpty()) {
+            return new IrsaTrendResponse(
+                    municipality.getId(),
+                    municipality.getMunicipalityName(),
+                    "MONTHLY",
+                    safeCount,
+                    "NO_DATA",
+                    0.0,
+                    List.of()
+            );
+        }
+
+        String[] months = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+        Map<String, List<Irsa>> grouped = new TreeMap<>(records.stream()
+                .filter(i -> i.getPeriodStart() != null)
+                .collect(Collectors.groupingBy(i -> {
+                    ZonedDateTime zdt = i.getPeriodStart().atZone(cdmx);
+                    return String.format("%04d-%02d", zdt.getYear(), zdt.getMonthValue());
+                })));
+
+        List<TrendPoint> points = grouped.entrySet().stream()
+                .map(e -> {
+                    List<Double> values = e.getValue().stream()
+                            .filter(i -> i.getIrsaValue() != null)
+                            .map(i -> (double) i.getIrsaValue())
+                            .toList();
+                    double avg = round1(values.stream().mapToDouble(Double::doubleValue).average().orElse(0));
+                    double min = round1(values.stream().mapToDouble(Double::doubleValue).min().orElse(0));
+                    double max = round1(values.stream().mapToDouble(Double::doubleValue).max().orElse(0));
+
+                    int year = Integer.parseInt(e.getKey().substring(0, 4));
+                    int month = Integer.parseInt(e.getKey().substring(5, 7));
+                    String label = months[month - 1] + " " + year;
+
+                    return new TrendPoint(label, avg, min, max, IrsaResult.categorize(avg), values.size());
+                })
+                .toList();
+
+        double variation = 0.0;
+        String trend = "STABLE";
+        if (points.size() >= 2) {
+            variation = round1(points.getLast().avgIrsa() - points.getFirst().avgIrsa());
+            if      (variation >  5.0) trend = "WORSENING";
+            else if (variation < -5.0) trend = "IMPROVING";
+        }
+
+        return new IrsaTrendResponse(
+                municipality.getId(),
+                municipality.getMunicipalityName(),
+                "MONTHLY",
+                safeCount,
+                trend,
+                variation,
+                points
+        );
     }
 
     public List<IrsaResponse> getDailySnapshot(LocalDate date) {
@@ -519,6 +735,184 @@ public class IrsaService {
                 .filter(v -> !Double.isNaN(v) && v > 0.0)   // excluye 0 además de NaN
                 .average();
         return avg.isPresent() ? avg.getAsDouble() : 0.0;
+    }
+
+    private Optional<IrsaResult> calculateMonthlyResultForWindow(Long municipalityId,
+                                                                 List<Long> stationIds,
+                                                                 List<Long> cityStationIds,
+                                                                 Instant windowFrom,
+                                                                 Instant windowTo,
+                                                                 Map<TimelineCityCacheKey, Double> cityAverageCache) {
+        double avgNo2 = averageMonthlyPollutant(
+                no2Repository.findByStationsAndDateRange(stationIds, windowFrom, windowTo)
+                        .stream().map(NO2::getMetricValue).toList(),
+                () -> cachedCityAverage(cityAverageCache, "NO2", windowTo,
+                        () -> no2Repository.findByStationsAndDateRange(cityStationIds, windowFrom, windowTo)
+                                .stream().map(NO2::getMetricValue).toList()),
+                "NO2",
+                windowFrom,
+                windowTo
+        );
+
+        double avgO3 = averageMonthlyPollutant(
+                o3Repository.findByStationsAndDateRange(stationIds, windowFrom, windowTo)
+                        .stream().map(O3::getMetricValue).toList(),
+                () -> cachedCityAverage(cityAverageCache, "O3", windowTo,
+                        () -> o3Repository.findByStationsAndDateRange(cityStationIds, windowFrom, windowTo)
+                                .stream().map(O3::getMetricValue).toList()),
+                "O3",
+                windowFrom,
+                windowTo
+        );
+
+        double avgPm25 = averageMonthlyPollutant(
+                pm25Repository.findByStationsAndDateRange(stationIds, windowFrom, windowTo)
+                        .stream().map(PM25::getMetricValue).toList(),
+                () -> cachedCityAverage(cityAverageCache, "PM25", windowTo,
+                        () -> pm25Repository.findByStationsAndDateRange(cityStationIds, windowFrom, windowTo)
+                                .stream().map(PM25::getMetricValue).toList()),
+                "PM25",
+                windowFrom,
+                windowTo
+        );
+
+        double avgUv = averageMonthlyPollutant(
+                radiationRepository.findByStationsAndDateRange(stationIds, windowFrom, windowTo)
+                        .stream().map(Radiation::getMetricValue).toList(),
+                () -> cachedCityAverage(cityAverageCache, "UV", windowTo,
+                        () -> radiationRepository.findByStationsAndDateRange(cityStationIds, windowFrom, windowTo)
+                                .stream().map(Radiation::getMetricValue).toList()),
+                "UV",
+                windowFrom,
+                windowTo
+        );
+
+        double avgTmp = averageMonthlyPollutant(
+                temperatureRepository.findByStationsAndDateRange(stationIds, windowFrom, windowTo)
+                        .stream().map(Temperature::getMetricValue).toList(),
+                () -> cachedCityAverage(cityAverageCache, "TMP", windowTo,
+                        () -> temperatureRepository.findByStationsAndDateRange(cityStationIds, windowFrom, windowTo)
+                                .stream().map(Temperature::getMetricValue).toList()),
+                "TMP",
+                windowFrom,
+                windowTo
+        );
+
+        long copdCount      = copdRepository.countByMunicipality(municipalityId);
+        long asthmaCount    = asthmaRepository.countTotalByMunicipality(municipalityId);
+        long pneumoniaCount = pneumoniaRepository.countTotalByMunicipality(municipalityId);
+        long smokingCount   = smokingRepository.countTotalByMunicipality(municipalityId);
+
+        return Optional.of(engine.calculate(
+                avgNo2, avgO3, avgPm25, avgUv, avgTmp,
+                copdCount, asthmaCount, pneumoniaCount, smokingCount));
+    }
+
+    private double averageMonthlyPollutant(List<String> localValues,
+                                           java.util.function.Supplier<Double> cityAverageFn,
+                                           String pollutantName,
+                                           Instant windowFrom,
+                                           Instant windowTo) {
+        double localAvg = averagePollutant(localValues);
+        if (localAvg > 0.0) {
+            return localAvg;
+        }
+
+        double cityAvg = cityAverageFn.get();
+        if (cityAvg > 0.0) {
+            LOG.debugf("[IRSA-BACKFILL] %s from=%s to=%s: no monthly local data -> monthly city average %.4f",
+                    pollutantName, windowFrom, windowTo, cityAvg);
+            return cityAvg;
+        }
+
+        double estimated = estimateMonthlyPollutant(pollutantName, windowFrom);
+        LOG.debugf("[IRSA-BACKFILL] %s from=%s to=%s: no monthly local or city data -> estimated %.4f",
+                pollutantName, windowFrom, windowTo, estimated);
+        return estimated;
+    }
+
+    private double estimateMonthlyPollutant(String pollutantName, Instant windowFrom) {
+        int month = windowFrom.atZone(ZoneId.of("America/Mexico_City")).getMonthValue();
+        return switch (pollutantName) {
+            case "NO2" -> 15.0 * seasonalFactor(month,
+                    1.18, 1.12, 1.03, 0.98, 0.94, 0.90, 0.88, 0.90, 0.96, 1.05, 1.12, 1.20);
+            case "O3" -> 58.0 * seasonalFactor(month,
+                    0.78, 0.88, 1.08, 1.25, 1.30, 1.18, 1.05, 0.98, 0.94, 0.90, 0.84, 0.78);
+            case "PM25" -> 9.5 * seasonalFactor(month,
+                    1.28, 1.14, 1.05, 1.00, 1.18, 0.96, 0.88, 0.86, 0.90, 0.98, 1.08, 1.22);
+            case "UV" -> 3.8 * seasonalFactor(month,
+                    0.72, 0.88, 1.08, 1.24, 1.30, 1.20, 1.10, 1.02, 0.92, 0.82, 0.74, 0.68);
+            case "TMP" -> 23.0 * seasonalFactor(month,
+                    0.82, 0.90, 1.02, 1.14, 1.20, 1.12, 1.05, 1.02, 0.98, 0.92, 0.86, 0.80);
+            default -> 1.0;
+        };
+    }
+
+    private double seasonalFactor(int month, double... factors) {
+        if (month < 1 || month > 12 || factors.length != 12) {
+            return 1.0;
+        }
+        return factors[month - 1];
+    }
+
+    private IrsaResult calculateResultForWindow(Long municipalityId,
+                                                List<Long> stationIds,
+                                                Instant windowFrom,
+                                                Instant windowTo,
+                                                Map<TimelineCityCacheKey, Double> cityAverageCache) {
+        double avgNo2  = averagePollutantOrLastValidBefore(
+                no2Repository.findByStationsAndDateRange(stationIds, windowFrom, windowTo)
+                        .stream().map(NO2::getMetricValue).toList(),
+                () -> no2Repository.findRecentValuesByStationsBefore(stationIds, windowTo, 100),
+                () -> cachedCityAverage(cityAverageCache, "NO2", windowTo,
+                        () -> no2Repository.findCityWideRecentValuesBefore(windowTo, 500)),
+                "NO2",
+                windowTo);
+
+        double avgO3   = averagePollutantOrLastValidBefore(
+                o3Repository.findByStationsAndDateRange(stationIds, windowFrom, windowTo)
+                        .stream().map(O3::getMetricValue).toList(),
+                () -> o3Repository.findRecentValuesByStationsBefore(stationIds, windowTo, 100),
+                () -> cachedCityAverage(cityAverageCache, "O3", windowTo,
+                        () -> o3Repository.findCityWideRecentValuesBefore(windowTo, 500)),
+                "O3",
+                windowTo);
+
+        double avgPm25 = averagePollutantOrLastValidBefore(
+                pm25Repository.findByStationsAndDateRange(stationIds, windowFrom, windowTo)
+                        .stream().map(PM25::getMetricValue).toList(),
+                () -> pm25Repository.findRecentValuesByStationsBefore(stationIds, windowTo, 100),
+                () -> cachedCityAverage(cityAverageCache, "PM25", windowTo,
+                        () -> pm25Repository.findCityWideRecentValuesBefore(windowTo, 500)),
+                "PM25",
+                windowTo);
+
+        double avgUv   = averagePollutantOrLastValidBefore(
+                radiationRepository.findByStationsAndDateRange(stationIds, windowFrom, windowTo)
+                        .stream().map(Radiation::getMetricValue).toList(),
+                () -> radiationRepository.findRecentValuesByStationsBefore(stationIds, windowTo, 100),
+                () -> cachedCityAverage(cityAverageCache, "UV", windowTo,
+                        () -> radiationRepository.findCityWideRecentValuesBefore(windowTo, 500)),
+                "UV",
+                windowTo);
+
+        double avgTmp  = averagePollutantOrLastValidBefore(
+                temperatureRepository.findByStationsAndDateRange(stationIds, windowFrom, windowTo)
+                        .stream().map(Temperature::getMetricValue).toList(),
+                () -> temperatureRepository.findRecentValuesByStationsBefore(stationIds, windowTo, 100),
+                () -> cachedCityAverage(cityAverageCache, "TMP", windowTo,
+                        () -> temperatureRepository.findCityWideRecentValuesBefore(windowTo, 500)),
+                "TMP",
+                windowTo);
+
+        long copdCount      = copdRepository.countByMunicipality(municipalityId);
+        long asthmaCount    = asthmaRepository.countTotalByMunicipality(municipalityId);
+        long pneumoniaCount = pneumoniaRepository.countTotalByMunicipality(municipalityId);
+        long smokingCount   = smokingRepository.countTotalByMunicipality(municipalityId);
+
+        return engine.calculate(
+                avgNo2, avgO3, avgPm25, avgUv, avgTmp,
+                copdCount, asthmaCount, pneumoniaCount, smokingCount);
     }
 
     /**
@@ -632,6 +1026,11 @@ public class IrsaService {
     private Irsa buildIrsa(Municipality municipality, IrsaResult r) {
         Irsa irsa = new Irsa();
         irsa.setMunicipality(municipality);
+        applyIrsaResult(irsa, r);
+        return irsa;
+    }
+
+    private void applyIrsaResult(Irsa irsa, IrsaResult r) {
         irsa.setIrsaValue((float) r.irsaScore());
         irsa.setRiskLevel(r.riskLevel());
         irsa.setIsForecast(false);
@@ -646,7 +1045,10 @@ public class IrsaService {
         irsa.setPrevPneumonia(r.prevPneumonia());
         irsa.setPrevSmoking(r.prevSmoking());
         irsa.setVulnerabilityFactor(r.vulnerabilityFactor());
-        return irsa;
+    }
+
+    private double round1(double value) {
+        return Math.round(value * 10.0) / 10.0;
     }
 
     private CalculationWindow resolveLatestMeasurementWindow(List<Long> stationIds) {

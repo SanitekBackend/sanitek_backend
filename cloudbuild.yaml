@@ -32,6 +32,12 @@ substitutions:
   _DB_JDBC_URL: ""
   _FIREBASE_SERVICE_ACCOUNT_LOCATION: /secrets/firebase.json
   _CORS_ORIGINS: "https://sanitek-frontend-443589660460.us-central1.run.app"
+  _MAILER_HOST: "smtp-relay.brevo.com"
+  _MAILER_PORT: "587"
+  _MAILER_FROM: "a01666336@tec.mx"
+  _MAILER_START_TLS: "REQUIRED"
+  _MAILER_TLS_TRUST_ALL: "false"
+  _MAILER_MOCK: "false"
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -76,8 +82,8 @@ steps:
           --platform managed \
           --port 8080 \
           --allow-unauthenticated \
-          --set-env-vars "DB_JDBC_URL=${_DB_JDBC_URL},DB_SCHEMA_STRATEGY=update,FIREBASE_SERVICE_ACCOUNT_LOCATION=${_FIREBASE_SERVICE_ACCOUNT_LOCATION},CORS_ORIGINS=${_CORS_ORIGINS}" \
-          --set-secrets "DB_USERNAME=db-username:latest,DB_PASSWORD=db-password:latest,FIREBASE_WEB_API_KEY=ApiKey:latest,/secrets/firebase.json=firebase-service-account:latest"
+          --set-env-vars "DB_JDBC_URL=${_DB_JDBC_URL},DB_SCHEMA_STRATEGY=validate,FIREBASE_SERVICE_ACCOUNT_LOCATION=${_FIREBASE_SERVICE_ACCOUNT_LOCATION},CORS_ORIGINS=${_CORS_ORIGINS},MESSAGING_ENABLED=false,MAILER_HOST=${_MAILER_HOST},MAILER_PORT=${_MAILER_PORT},MAILER_FROM=${_MAILER_FROM},MAILER_START_TLS=${_MAILER_START_TLS},MAILER_TLS_TRUST_ALL=${_MAILER_TLS_TRUST_ALL},MAILER_MOCK=${_MAILER_MOCK}" \
+          --set-secrets "DB_USERNAME=db-username:latest,DB_PASSWORD=db-password:latest,FIREBASE_WEB_API_KEY=ApiKey:latest,/secrets/firebase.json=firebase-service-account:latest,MAILER_USERNAME=mailer-username:latest,MAILER_PASSWORD=mailer-password:latest"
         # Si usas Cloud SQL (recomendado), agrega también:
         # --add-cloudsql-instances ${_PROJECT_ID}:${_REGION}:YOUR_INSTANCE_NAME
 

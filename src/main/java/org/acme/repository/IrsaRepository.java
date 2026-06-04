@@ -30,6 +30,17 @@ public class IrsaRepository implements PanacheRepository<Irsa> {
                 municipalityId, from, to).list();
     }
 
+    public Optional<Irsa> findByMunicipalityAndPeriod(Long municipalityId, Instant periodStart, Instant periodEnd) {
+        return find("municipality.id = ?1 AND periodStart = ?2 AND periodEnd = ?3 AND isForecast = false",
+                municipalityId, periodStart, periodEnd).firstResultOptional();
+    }
+
+    public List<Irsa> findHistoricalByMunicipalityPeriod(Long municipalityId, Instant from, Instant to) {
+        return find("municipality.id = ?1 AND periodStart >= ?2 AND periodStart < ?3 AND isForecast = false",
+                Sort.by("periodStart").ascending(),
+                municipalityId, from, to).list();
+    }
+
     public List<Irsa> findAllLatest() {
         return getEntityManager()
                 .createQuery("""

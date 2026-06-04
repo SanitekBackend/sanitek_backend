@@ -24,6 +24,12 @@ public class Irsa extends BaseEntity {
     @Column(name = "forecast_date")
     private Instant forecastDate;
 
+    @Column(name = "period_start")
+    private Instant periodStart;
+
+    @Column(name = "period_end")
+    private Instant periodEnd;
+
     @Column(name = "norm_no2")
     private Double normNo2;
 
@@ -74,6 +80,12 @@ public class Irsa extends BaseEntity {
 
     public Instant getForecastDate() { return forecastDate; }
     public void setForecastDate(Instant forecastDate) { this.forecastDate = forecastDate; }
+
+    public Instant getPeriodStart() { return periodStart; }
+    public void setPeriodStart(Instant periodStart) { this.periodStart = periodStart; }
+
+    public Instant getPeriodEnd() { return periodEnd; }
+    public void setPeriodEnd(Instant periodEnd) { this.periodEnd = periodEnd; }
 
     public Double getNormNo2() { return normNo2; }
     public void setNormNo2(Double normNo2) { this.normNo2 = normNo2; }

@@ -1,11 +1,14 @@
 package org.acme.infrastructure.messaging.rabbitmq;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import org.acme.domain.entity.Alert;
 import org.acme.dto.response.IrsaResponse;
 import org.acme.infrastructure.messaging.events.AlertEvent;
+import org.acme.service.AlertEmailService;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import java.time.Instant;
@@ -17,6 +20,12 @@ public class AlertEventProducer {
 
     @Channel("alert-events-out")
     Emitter<AlertEvent> emitter;
+
+    @ConfigProperty(name = "messaging.enabled", defaultValue = "true")
+    boolean messagingEnabled;
+
+    @Inject
+    AlertEmailService alertEmailService;
 
     public void publishAlertCreated(Alert alert) {
         AlertEvent event = new AlertEvent(
@@ -53,6 +62,12 @@ public class AlertEventProducer {
     }
 
     private void publish(AlertEvent event) {
+        if (!messagingEnabled) {
+            LOG.debugf("[RabbitMQ] Messaging disabled, sending alert email directly type=%s municipalityId=%s",
+                    event.eventType(), event.municipalityId());
+            alertEmailService.sendFromEvent(event);
+            return;
+        }
         LOG.debugf("[RabbitMQ] Publishing alert event type=%s municipalityId=%s", event.eventType(), event.municipalityId());
         emitter.send(event);
     }
