@@ -62,13 +62,22 @@ public class AlertEventProducer {
     }
 
     private void publish(AlertEvent event) {
-        if (!messagingEnabled) {
-            LOG.debugf("[RabbitMQ] Messaging disabled, sending alert email directly type=%s municipalityId=%s",
+        try {
+            if (!messagingEnabled) {
+                LOG.debugf("[RabbitMQ] Messaging disabled, sending alert email directly type=%s municipalityId=%s",
+                        event.eventType(), event.municipalityId());
+                alertEmailService.sendFromEvent(event);
+                return;
+            }
+            LOG.debugf("[RabbitMQ] Publishing alert event type=%s municipalityId=%s", event.eventType(), event.municipalityId());
+            emitter.send(event).exceptionally(throwable -> {
+                LOG.warnf(throwable, "[RabbitMQ] Alert event could not be published type=%s municipalityId=%s",
+                        event.eventType(), event.municipalityId());
+                return null;
+            });
+        } catch (Exception e) {
+            LOG.warnf(e, "[RabbitMQ] Alert event publish failed type=%s municipalityId=%s",
                     event.eventType(), event.municipalityId());
-            alertEmailService.sendFromEvent(event);
-            return;
         }
-        LOG.debugf("[RabbitMQ] Publishing alert event type=%s municipalityId=%s", event.eventType(), event.municipalityId());
-        emitter.send(event);
     }
 }

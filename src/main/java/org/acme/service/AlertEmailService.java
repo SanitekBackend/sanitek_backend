@@ -6,10 +6,12 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.acme.domain.entity.Alert;
+import org.acme.dto.response.IrsaResponse;
 import org.acme.infrastructure.messaging.events.AlertEvent;
 import org.acme.repository.AlertRepository;
 import org.jboss.logging.Logger;
 
+import java.time.Instant;
 import java.util.List;
 
 @ApplicationScoped
@@ -19,6 +21,46 @@ public class AlertEmailService {
 
     @Inject AlertRepository alertRepository;
     @Inject ReactiveMailer reactiveMailer;
+
+    public void sendAlertCreated(Alert alert) {
+        if (alert == null) {
+            return;
+        }
+
+        sendFromEvent(new AlertEvent(
+                "ALERT_CREATED",
+                alert.getId(),
+                alert.getUser().getId(),
+                alert.getUser().getEmail(),
+                alert.getMunicipality().getId(),
+                alert.getMunicipality().getMunicipalityName(),
+                alert.getAlertType(),
+                alert.getMessage(),
+                null,
+                null,
+                Instant.now()
+        ));
+    }
+
+    public void sendRiskDetected(IrsaResponse irsa) {
+        if (irsa == null) {
+            return;
+        }
+
+        sendFromEvent(new AlertEvent(
+                "IRSA_RISK_DETECTED",
+                null,
+                null,
+                null,
+                irsa.municipality().id(),
+                irsa.municipality().municipalityName(),
+                "IRSA_RISK",
+                "IRSA risk level " + irsa.riskLevel() + " detected for " + irsa.municipality().municipalityName(),
+                irsa.riskLevel(),
+                irsa.irsaValue(),
+                Instant.now()
+        ));
+    }
 
     public void sendFromEvent(AlertEvent event) {
         if (event == null) {

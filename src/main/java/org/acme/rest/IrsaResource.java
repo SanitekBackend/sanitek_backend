@@ -9,11 +9,9 @@ import org.acme.dto.response.IrsaDiagnosticResponse;
 import org.acme.dto.response.IrsaResponse;
 import org.acme.dto.response.IrsaTimelineSnapshotResponse;
 import org.acme.dto.response.IrsaTrendResponse;
-import org.acme.infrastructure.messaging.rabbitmq.AlertEventProducer;
 import org.acme.infrastructure.messaging.kafka.IrsaBatchProcessingStats;
-import org.acme.infrastructure.messaging.kafka.IrsaCalculationProducer;
+import org.acme.service.AlertEmailService;
 import org.acme.service.IrsaService;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -30,16 +28,10 @@ public class IrsaResource {
     IrsaService service;
 
     @Inject
-    IrsaCalculationProducer irsaCalculationProducer;
-
-    @Inject
     IrsaBatchProcessingStats irsaBatchProcessingStats;
 
     @Inject
-    AlertEventProducer alertEventProducer;
-
-    @ConfigProperty(name = "messaging.enabled", defaultValue = "true")
-    boolean messagingEnabled;
+    AlertEmailService alertEmailService;
 
     @GET
     public List<IrsaResponse> listLatest() {
@@ -83,7 +75,7 @@ public class IrsaResource {
 
         IrsaResponse result = service.calculate(municipalityId);
         if (isHighRisk(result.riskLevel())) {
-            alertEventProducer.publishRiskDetected(result);
+            alertEmailService.sendRiskDetected(result);
         }
 
         return Response.status(Response.Status.CREATED)
@@ -94,22 +86,13 @@ public class IrsaResource {
     @POST
     @Path("/calculate/{municipalityId}/async")
     public Response calculateAsync(@PathParam("municipalityId") Long municipalityId) {
-        if (!messagingEnabled) {
-            return messagingUnavailable();
-        }
-        String batchId = irsaCalculationProducer.publishSingle(municipalityId);
-        return Response.accepted(Map.of("batchId", batchId, "enqueued", 1)).build();
+        return messagingUnavailable();
     }
 
     @POST
     @Path("/batch/calculate/all")
     public Response calculateAllAsync() {
-        if (!messagingEnabled) {
-            return messagingUnavailable();
-        }
-        List<Long> municipalityIds = service.listAllMunicipalityIds();
-        String batchId = irsaCalculationProducer.publishBatch(municipalityIds);
-        return Response.accepted(Map.of("batchId", batchId, "enqueued", municipalityIds.size())).build();
+        return messagingUnavailable();
     }
 
     @GET
