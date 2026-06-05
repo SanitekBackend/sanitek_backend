@@ -19,8 +19,8 @@ public record IrsaResult(
         Instant calculatedAt
 ) {
     public static String categorize(double score) {
-        if (score <= 40.0) return "LOW";
-        if (score <= 50.0) return "MODERATE";
+        if (score <= 35.0) return "LOW";
+        if (score <= 39.0) return "MODERATE";
         return "HIGH";
     }
 }
