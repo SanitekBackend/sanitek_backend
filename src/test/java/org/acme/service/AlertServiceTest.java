@@ -39,6 +39,7 @@ class AlertServiceTest {
     @Mock MunicipalityRepository municipalityRepository;
     @Mock AlertMapper            alertMapper;
     @Mock AlertEventProducer     alertEventProducer;
+    @Mock CurrentUserService     currentUserService;
 
     @InjectMocks AlertService service;
 
@@ -191,6 +192,34 @@ class AlertServiceTest {
         verify(alertEventProducer).publishAlertCreated(cap.capture());
         assertTrue(cap.getValue().getMessage().contains("Coyoacán"));
         assertEquals("SUBSCRIPTION", cap.getValue().getAlertType());
+    }
+
+    @Test
+    @DisplayName("subscribeCurrentUser usa el usuario autenticado")
+    void subscribeCurrentUser_usaUsuarioAutenticado() {
+        when(currentUserService.getCurrentUser()).thenReturn(user);
+        when(municipalityRepository.findByIdOptional(MUN_ID)).thenReturn(Optional.of(mun));
+        when(alertRepository.findByUserAndMunicipality(USER_ID, MUN_ID)).thenReturn(Optional.empty());
+        when(alertMapper.toResponse(any(Alert.class))).thenReturn(alertResponse(ALERT_ID, true));
+
+        service.subscribeCurrentUser(MUN_ID);
+
+        verify(alertRepository).findByUserAndMunicipality(USER_ID, MUN_ID);
+        verify(userRepository, never()).findByIdOptional(anyLong());
+    }
+
+    @Test
+    @DisplayName("deactivateForCurrentUser no permite modificar alerta ajena")
+    void deactivateForCurrentUser_alertaAjena_notFound() {
+        when(currentUserService.getCurrentUser()).thenReturn(user);
+        when(alertRepository.findByIdAndUser(ALERT_ID, USER_ID)).thenReturn(Optional.empty());
+
+        AppException exception = assertThrows(
+                AppException.class,
+                () -> service.deactivateForCurrentUser(ALERT_ID)
+        );
+
+        assertEquals(jakarta.ws.rs.core.Response.Status.NOT_FOUND, exception.getStatus());
     }
 
     // ── activate ─────────────────────────────────────────────────────────────

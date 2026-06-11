@@ -25,11 +25,21 @@ public class AlertService {
     @Inject MunicipalityRepository municipalityRepository;
     @Inject AlertMapper alertMapper;
     @Inject AlertEventProducer alertEventProducer;
+    @Inject CurrentUserService currentUserService;
+
+    @Transactional
+    public AlertResponse createForCurrentUser(CreateAlertRequest request) {
+        return create(currentUserService.getCurrentUser(), request);
+    }
 
     @Transactional
     public AlertResponse create(Long userId, CreateAlertRequest request) {
         User user = userRepository.findByIdOptional(userId)
                 .orElseThrow(() -> AppException.notFound("User not found"));
+        return create(user, request);
+    }
+
+    private AlertResponse create(User user, CreateAlertRequest request) {
         Municipality municipality = municipalityRepository.findByIdOptional(request.municipalityId())
                 .orElseThrow(() -> AppException.notFound("Municipality not found"));
 
@@ -46,13 +56,22 @@ public class AlertService {
     }
 
     @Transactional
+    public AlertResponse subscribeCurrentUser(Long municipalityId) {
+        return subscribe(currentUserService.getCurrentUser(), municipalityId);
+    }
+
+    @Transactional
     public AlertResponse subscribe(Long userId, Long municipalityId) {
         User user = userRepository.findByIdOptional(userId)
                 .orElseThrow(() -> AppException.notFound("User not found"));
+        return subscribe(user, municipalityId);
+    }
+
+    private AlertResponse subscribe(User user, Long municipalityId) {
         Municipality municipality = municipalityRepository.findByIdOptional(municipalityId)
                 .orElseThrow(() -> AppException.notFound("Municipality not found"));
 
-        Alert existing = alertRepository.findByUserAndMunicipality(userId, municipalityId).orElse(null);
+        Alert existing = alertRepository.findByUserAndMunicipality(user.getId(), municipalityId).orElse(null);
         if (existing != null) {
             existing.setIsActive(true);
             alertEventProducer.publishAlertCreated(existing);
@@ -72,11 +91,28 @@ public class AlertService {
     }
 
     @Transactional
+    public AlertResponse activateForCurrentUser(Long alertId) {
+        User user = currentUserService.getCurrentUser();
+        Alert alert = alertRepository.findByIdAndUser(alertId, user.getId())
+                .orElseThrow(() -> AppException.notFound("Alert not found"));
+        alert.setIsActive(true);
+        return alertMapper.toResponse(alert);
+    }
+
+    @Transactional
     public AlertResponse activate(Long alertId) {
         Alert alert = alertRepository.findByIdOptional(alertId)
                 .orElseThrow(() -> AppException.notFound("Alert not found"));
         alert.setIsActive(true);
         return alertMapper.toResponse(alert);
+    }
+
+    @Transactional
+    public void deactivateForCurrentUser(Long alertId) {
+        User user = currentUserService.getCurrentUser();
+        Alert alert = alertRepository.findByIdAndUser(alertId, user.getId())
+                .orElseThrow(() -> AppException.notFound("Alert not found"));
+        alert.setIsActive(false);
     }
 
     @Transactional
@@ -92,14 +128,29 @@ public class AlertService {
                 .toList();
     }
 
+    public List<AlertResponse> getForCurrentUser() {
+        return getByUser(currentUserService.getCurrentUser().getId());
+    }
+
     public List<AlertResponse> getActiveByUser(Long userId) {
         return alertRepository.findActiveByUser(userId).stream()
                 .map(alertMapper::toResponse)
                 .toList();
     }
 
+    public List<AlertResponse> getActiveForCurrentUser() {
+        return getActiveByUser(currentUserService.getCurrentUser().getId());
+    }
+
     public List<AlertResponse> getByMunicipality(Long municipalityId) {
         return alertRepository.findActiveByMunicipality(municipalityId).stream()
+                .map(alertMapper::toResponse)
+                .toList();
+    }
+
+    public List<AlertResponse> getByMunicipalityForCurrentUser(Long municipalityId) {
+        User user = currentUserService.getCurrentUser();
+        return alertRepository.findByUserAndMunicipalityList(user.getId(), municipalityId).stream()
                 .map(alertMapper::toResponse)
                 .toList();
     }

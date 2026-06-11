@@ -26,6 +26,10 @@ public class AlertRepository implements PanacheRepository<Alert> {
         return find("municipality.id = ?1 AND isActive = true", municipalityId).list();
     }
 
+    public List<Alert> findByUserAndMunicipalityList(Long userId, Long municipalityId) {
+        return find("user.id = ?1 AND municipality.id = ?2", userId, municipalityId).list();
+    }
+
     public List<Alert> findActiveByMunicipalityWithUser(Long municipalityId) {
         return find("""
                 SELECT a FROM Alert a
@@ -37,5 +41,9 @@ public class AlertRepository implements PanacheRepository<Alert> {
 
     public Optional<Alert> findByUserAndMunicipality(Long userId, Long municipalityId) {
         return find("user.id = ?1 AND municipality.id = ?2", userId, municipalityId).firstResultOptional();
+    }
+
+    public Optional<Alert> findByIdAndUser(Long alertId, Long userId) {
+        return find("id = ?1 AND user.id = ?2", alertId, userId).firstResultOptional();
     }
 }
