@@ -12,6 +12,12 @@ import org.acme.dto.response.IrsaTrendResponse;
 import org.acme.infrastructure.messaging.kafka.IrsaBatchProcessingStats;
 import org.acme.service.AlertEmailService;
 import org.acme.service.IrsaService;
+import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
+import org.eclipse.microprofile.openapi.annotations.media.Content;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
+import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -22,6 +28,7 @@ import java.util.Map;
 @Path("/api/irsa")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
+@Tag(name = "IRSA", description = "Indice de Riesgo Sanitario y Ambiental")
 public class IrsaResource {
 
     @Inject
@@ -34,6 +41,18 @@ public class IrsaResource {
     AlertEmailService alertEmailService;
 
     @GET
+    @Operation(
+            summary = "Listar resultados IRSA",
+            description = "Obtiene el resultado IRSA mas reciente de cada alcaldia."
+    )
+    @APIResponse(
+            responseCode = "200",
+            description = "Lista de resultados IRSA",
+            content = @Content(schema = @Schema(
+                    type = SchemaType.ARRAY,
+                    implementation = IrsaResponse.class
+            ))
+    )
     public List<IrsaResponse> listLatest() {
         return service.listLatestAll();
     }
@@ -121,6 +140,15 @@ public class IrsaResource {
 
     @GET
     @Path("/batch/status")
+    @Operation(
+            summary = "Listar estados de lotes IRSA",
+            description = "Obtiene los estados registrados de procesamiento por lotes, indexados por batchId."
+    )
+    @APIResponse(
+            responseCode = "200",
+            description = "Mapa de estados de procesamiento",
+            content = @Content(schema = @Schema(type = SchemaType.OBJECT))
+    )
     public Map<String, IrsaBatchProcessingStats.Snapshot> allBatchStatuses() {
         return irsaBatchProcessingStats.allSnapshots();
     }
