@@ -20,6 +20,7 @@ import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
+import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
@@ -53,7 +54,13 @@ public class CompanyUserResource {
             @APIResponse(responseCode = "403", description = "El usuario no tiene permisos"),
             @APIResponse(responseCode = "409", description = "El correo ya esta registrado")
     })
-    public Response create(@Valid CreateCompanyUserRequest request) {
+    public Response create(
+            @RequestBody(
+                    description = "Datos del usuario que se agregara a la empresa del administrador",
+                    required = true,
+                    content = @Content(schema = @Schema(implementation = CreateCompanyUserRequest.class))
+            )
+            @Valid CreateCompanyUserRequest request) {
         UserResponse response = service.createCompanyUser(request);
         return Response.status(Response.Status.CREATED).entity(response).build();
     }
@@ -93,7 +100,12 @@ public class CompanyUserResource {
             @APIResponse(responseCode = "404", description = "Usuario no encontrado")
     })
     public Response deactivate(
-            @Parameter(description = "Identificador del usuario", required = true, example = "15")
+            @Parameter(
+                    name = "id",
+                    description = "Identificador del usuario",
+                    required = true,
+                    example = "15"
+            )
             @PathParam("id") Long id) {
         service.deactivateCompanyUser(id);
         return Response.noContent().build();
@@ -117,7 +129,12 @@ public class CompanyUserResource {
             @APIResponse(responseCode = "404", description = "Usuario no encontrado")
     })
     public UserResponse activate(
-            @Parameter(description = "Identificador del usuario", required = true, example = "15")
+            @Parameter(
+                    name = "id",
+                    description = "Identificador del usuario",
+                    required = true,
+                    example = "15"
+            )
             @PathParam("id") Long id) {
         return service.activateCompanyUser(id);
     }

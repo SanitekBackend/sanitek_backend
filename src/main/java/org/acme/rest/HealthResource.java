@@ -57,7 +57,12 @@ public class HealthResource {
             @APIResponse(responseCode = "404", description = "Alcaldia no encontrada")
     })
     public HealthSummaryResponse getByMunicipality(
-            @Parameter(description = "Identificador de la alcaldia", required = true, example = "22")
+            @Parameter(
+                    name = "id",
+                    description = "Identificador de la alcaldia",
+                    required = true,
+                    example = "22"
+            )
             @PathParam("id") Long id) {
         return service.getSummaryByMunicipality(id);
     }

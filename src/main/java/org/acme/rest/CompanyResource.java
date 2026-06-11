@@ -17,6 +17,7 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.enums.SchemaType;
 import org.eclipse.microprofile.openapi.annotations.media.Content;
 import org.eclipse.microprofile.openapi.annotations.media.Schema;
+import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
@@ -50,7 +51,13 @@ public class CompanyResource {
             @APIResponse(responseCode = "403", description = "El usuario no tiene permisos"),
             @APIResponse(responseCode = "409", description = "La empresa ya existe")
     })
-    public Response create(@Valid CreateCompanyRequest request) {
+    public Response create(
+            @RequestBody(
+                    description = "Datos de la empresa que se desea crear",
+                    required = true,
+                    content = @Content(schema = @Schema(implementation = CreateCompanyRequest.class))
+            )
+            @Valid CreateCompanyRequest request) {
         CompanyResponse response = service.create(request);
         return Response.status(Response.Status.CREATED).entity(response).build();
     }
