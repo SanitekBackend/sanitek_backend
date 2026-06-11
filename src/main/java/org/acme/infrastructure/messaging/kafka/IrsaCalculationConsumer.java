@@ -5,7 +5,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.acme.dto.response.IrsaResponse;
 import org.acme.infrastructure.messaging.events.IrsaCalculationMessage;
-import org.acme.infrastructure.messaging.rabbitmq.AlertEventProducer;
+import org.acme.service.AlertEmailService;
 import org.acme.service.IrsaService;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.jboss.logging.Logger;
@@ -22,7 +22,7 @@ public class IrsaCalculationConsumer {
     IrsaBatchProcessingStats stats;
 
     @Inject
-    AlertEventProducer alertEventProducer;
+    AlertEmailService alertEmailService;
 
     @Incoming("irsa-calculation-in")
     @Blocking
@@ -36,7 +36,7 @@ public class IrsaCalculationConsumer {
             IrsaResponse response = irsaService.calculate(municipalityId);
             boolean alertPublished = isHighRisk(response.riskLevel());
             if (alertPublished) {
-                alertEventProducer.publishRiskDetected(response);
+                alertEmailService.sendRiskDetected(response);
             }
             stats.onSuccess(batchId, municipalityId, response.riskLevel(), alertPublished);
             LOG.infof(

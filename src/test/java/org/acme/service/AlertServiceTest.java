@@ -7,7 +7,6 @@ import org.acme.dto.request.CreateAlertRequest;
 import org.acme.dto.response.AlertResponse;
 import org.acme.dto.response.MunicipalitySummary;
 import org.acme.exception.AppException;
-import org.acme.infrastructure.messaging.rabbitmq.AlertEventProducer;
 import org.acme.mapper.AlertMapper;
 import org.acme.repository.AlertRepository;
 import org.acme.repository.MunicipalityRepository;
@@ -38,7 +37,7 @@ class AlertServiceTest {
     @Mock UserRepository         userRepository;
     @Mock MunicipalityRepository municipalityRepository;
     @Mock AlertMapper            alertMapper;
-    @Mock AlertEventProducer     alertEventProducer;
+    @Mock AlertEmailService      alertEmailService;
     @Mock CurrentUserService     currentUserService;
 
     @InjectMocks AlertService service;
@@ -107,7 +106,7 @@ class AlertServiceTest {
         assertEquals(expected, actual);
         // flush() confirma que persist() fue llamado antes
         verify(alertRepository).flush();
-        verify(alertEventProducer).publishAlertCreated(any(Alert.class));
+        verify(alertEmailService).sendAlertCreated(any(Alert.class));
     }
 
     @Test
@@ -120,9 +119,9 @@ class AlertServiceTest {
 
         service.create(USER_ID, req);
 
-        // Capturamos la entidad publicada al event producer (unívoco, sin sobrecargas)
+        // Capturamos la entidad enviada al servicio de correo.
         ArgumentCaptor<Alert> cap = ArgumentCaptor.forClass(Alert.class);
-        verify(alertEventProducer).publishAlertCreated(cap.capture());
+        verify(alertEmailService).sendAlertCreated(cap.capture());
         assertTrue(cap.getValue().getIsActive());
         assertEquals("INFO", cap.getValue().getAlertType());
     }
@@ -152,7 +151,7 @@ class AlertServiceTest {
         AlertResponse actual = service.subscribe(USER_ID, MUN_ID);
 
         assertTrue(existente.getIsActive(), "La alerta existente debe reactivarse");
-        verify(alertEventProducer).publishAlertCreated(existente);
+        verify(alertEmailService).sendAlertCreated(existente);
         // flush() solo se llama al crear una nueva alerta → aquí no debe llamarse
         verify(alertRepository, never()).flush();
         assertEquals(expected, actual);
@@ -172,7 +171,7 @@ class AlertServiceTest {
         AlertResponse actual = service.subscribe(USER_ID, MUN_ID);
 
         verify(alertRepository).flush();
-        verify(alertEventProducer).publishAlertCreated(any(Alert.class));
+        verify(alertEmailService).sendAlertCreated(any(Alert.class));
         assertEquals(expected, actual);
     }
 
@@ -187,9 +186,9 @@ class AlertServiceTest {
 
         service.subscribe(USER_ID, MUN_ID);
 
-        // Capturamos desde el event producer (firma unívoca → sin ambigüedad de sobrecargas)
+        // Capturamos la entidad enviada al servicio de correo.
         ArgumentCaptor<Alert> cap = ArgumentCaptor.forClass(Alert.class);
-        verify(alertEventProducer).publishAlertCreated(cap.capture());
+        verify(alertEmailService).sendAlertCreated(cap.capture());
         assertTrue(cap.getValue().getMessage().contains("Coyoacán"));
         assertEquals("SUBSCRIPTION", cap.getValue().getAlertType());
     }

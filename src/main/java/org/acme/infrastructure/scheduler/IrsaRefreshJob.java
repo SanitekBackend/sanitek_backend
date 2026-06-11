@@ -4,7 +4,7 @@ import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.acme.dto.response.IrsaResponse;
-import org.acme.infrastructure.messaging.rabbitmq.AlertEventProducer;
+import org.acme.service.AlertEmailService;
 import org.acme.service.IrsaService;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
@@ -20,7 +20,7 @@ public class IrsaRefreshJob {
     private static final Logger LOG = Logger.getLogger(IrsaRefreshJob.class);
 
     @Inject IrsaService irsaService;
-    @Inject AlertEventProducer alertEventProducer;
+    @Inject AlertEmailService alertEmailService;
 
     @ConfigProperty(name = "irsa.alert.cooldown.hours", defaultValue = "6")
     long alertCooldownHours;
@@ -46,7 +46,7 @@ public class IrsaRefreshJob {
                 }
 
                 if (shouldNotify(response)) {
-                    alertEventProducer.publishRiskDetected(response);
+                    alertEmailService.sendRiskDetected(response);
                     notified++;
                 } else {
                     skipped++;

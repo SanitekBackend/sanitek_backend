@@ -3,7 +3,7 @@ package org.acme.infrastructure.messaging.kafka;
 import org.acme.dto.response.IrsaResponse;
 import org.acme.dto.response.MunicipalitySummary;
 import org.acme.infrastructure.messaging.events.IrsaCalculationMessage;
-import org.acme.infrastructure.messaging.rabbitmq.AlertEventProducer;
+import org.acme.service.AlertEmailService;
 import org.acme.service.IrsaService;
 import org.eclipse.microprofile.reactive.messaging.Emitter;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +36,7 @@ class KafkaBatchFlowTest {
 
     // ── dependencias del Consumer ──────────────────────────────────────
     @Mock  IrsaService irsaService;
-    @Mock  AlertEventProducer alertEventProducer;
+    @Mock  AlertEmailService alertEmailService;
 
     IrsaCalculationProducer producer;
     IrsaCalculationConsumer consumer;
@@ -52,7 +52,7 @@ class KafkaBatchFlowTest {
         consumer = new IrsaCalculationConsumer();
         set(consumer, "irsaService",       irsaService);
         set(consumer, "stats",             stats);
-        set(consumer, "alertEventProducer", alertEventProducer);
+        set(consumer, "alertEmailService", alertEmailService);
     }
 
     @Test
@@ -133,7 +133,7 @@ class KafkaBatchFlowTest {
         consumer.process(new IrsaCalculationMessage(batchId, 1L));
 
         // RabbitMQ exchange "sanitek.alert.events" NO recibe nada
-        verify(alertEventProducer, never()).publishRiskDetected(any());
+        verify(alertEmailService, never()).sendRiskDetected(any());
     }
 
     @Test
@@ -147,7 +147,7 @@ class KafkaBatchFlowTest {
 
         // RabbitMQ exchange "sanitek.alert.events" recibe el evento
         // Fan-out lo distribuye a: sanitek.alerts.email, sanitek.alerts.push, sanitek.alerts.audit
-        verify(alertEventProducer).publishRiskDetected(highRisk);
+        verify(alertEmailService).sendRiskDetected(highRisk);
     }
 
     @Test
