@@ -1,21 +1,26 @@
 package org.acme.rest;
 
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.acme.dto.request.IrsaBatchCalculationRequest;
 import org.acme.dto.response.IrsaBackfillResponse;
 import org.acme.dto.response.IrsaDiagnosticResponse;
 import org.acme.dto.response.IrsaResponse;
 import org.acme.dto.response.IrsaTimelineSnapshotResponse;
 import org.acme.dto.response.IrsaTrendResponse;
 import org.acme.infrastructure.messaging.kafka.IrsaBatchProcessingStats;
-import org.acme.service.AlertEmailService;
+import org.acme.infrastructure.messaging.kafka.IrsaCalculationProducer;
+import org.acme.infrastructure.messaging.rabbitmq.AlertEventProducer;
 import org.acme.service.IrsaService;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -31,7 +36,13 @@ public class IrsaResource {
     IrsaBatchProcessingStats irsaBatchProcessingStats;
 
     @Inject
-    AlertEmailService alertEmailService;
+    IrsaCalculationProducer irsaCalculationProducer;
+
+    @Inject
+    AlertEventProducer alertEventProducer;
+
+    @ConfigProperty(name = "messaging.enabled", defaultValue = "false")
+    boolean messagingEnabled;
 
     @GET
     public List<IrsaResponse> listLatest() {
@@ -75,7 +86,7 @@ public class IrsaResource {
 
         IrsaResponse result = service.calculate(municipalityId);
         if (isHighRisk(result.riskLevel())) {
-            alertEmailService.sendRiskDetected(result);
+            alertEventProducer.publishRiskDetected(result);
         }
 
         return Response.status(Response.Status.CREATED)
@@ -86,13 +97,50 @@ public class IrsaResource {
     @POST
     @Path("/calculate/{municipalityId}/async")
     public Response calculateAsync(@PathParam("municipalityId") Long municipalityId) {
-        return messagingUnavailable();
+        if (!messagingEnabled) {
+            return messagingUnavailable();
+        }
+        String batchId = irsaCalculationProducer.publishSingle(municipalityId);
+        return Response.accepted(Map.of("batchId", batchId, "enqueued", 1)).build();
+    }
+
+    @POST
+    @Path("/batch/calculate")
+    public Response calculateBatch(@Valid IrsaBatchCalculationRequest request) {
+        if (!messagingEnabled) {
+            return messagingUnavailable();
+        }
+        String batchId = irsaCalculationProducer.publishBatch(request.municipalityIds());
+        return Response.accepted(Map.of(
+                "batchId", batchId,
+                "enqueued", request.municipalityIds().stream().filter(java.util.Objects::nonNull).distinct().count()
+        )).build();
+    }
+
+    @POST
+    @Path("/batch/calculate/{municipalityIds}")
+    public Response calculateBatchFromPath(@PathParam("municipalityIds") String municipalityIds) {
+        if (!messagingEnabled) {
+            return messagingUnavailable();
+        }
+        List<Long> ids = Arrays.stream(municipalityIds.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(Long::valueOf)
+                .toList();
+        String batchId = irsaCalculationProducer.publishBatch(ids);
+        return Response.accepted(Map.of("batchId", batchId, "enqueued", ids.stream().distinct().count())).build();
     }
 
     @POST
     @Path("/batch/calculate/all")
     public Response calculateAllAsync() {
-        return messagingUnavailable();
+        if (!messagingEnabled) {
+            return messagingUnavailable();
+        }
+        List<Long> municipalityIds = service.listAllMunicipalityIds();
+        String batchId = irsaCalculationProducer.publishBatch(municipalityIds);
+        return Response.accepted(Map.of("batchId", batchId, "enqueued", municipalityIds.size())).build();
     }
 
     @GET
