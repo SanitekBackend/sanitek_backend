@@ -14,6 +14,7 @@ import org.acme.domain.entity.User;
 import org.acme.exception.AppException;
 import org.acme.exception.ErrorResponse;
 import org.acme.repository.UserRepository;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 @Provider
 @Authenticated
@@ -23,9 +24,19 @@ public class FirebaseAuthenticationFilter implements ContainerRequestFilter {
     @Inject AuthProvider authProvider;
     @Inject UserRepository userRepository;
     @Inject AuthenticatedUser authenticatedUser;
+    @ConfigProperty(name = "sanitek.mock-users.enabled", defaultValue = "false")
+    boolean mockUsersEnabled;
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
+        String requestPath = requestContext.getUriInfo().getPath();
+        if (requestPath.startsWith("/")) {
+            requestPath = requestPath.substring(1);
+        }
+        if (mockUsersEnabled && (requestPath.equals("api/users") || requestPath.startsWith("api/users/"))) {
+            return;
+        }
+
         String authorization = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             abort(requestContext, Response.Status.UNAUTHORIZED, "Authorization Bearer token is required");
